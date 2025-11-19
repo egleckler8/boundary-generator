@@ -1,8 +1,8 @@
 import numpy as np
 
-m = 25
-n = 25
-grid = np.zeros((2*m+1, 2*n+1))
+n = 40
+grid = np.zeros((n, n))
+n = int((n - 1)/2)
 # origin is (m+1, n+1)
 
 
@@ -11,22 +11,27 @@ def boundary_function(p):
     return 1
 
 
-k = 13
-max_theta = np.pi / 8
-min_theta = np.pi / 3
-max_r = min(m, n) - 1
-min_r = (min(m, n) - 1)/2
+max_theta = np.pi / 16
+min_theta = np.pi / 2
+max_r = n - 1
+min_r = (n - 1)/2
 
 # (1) Place markers on the corners
 theta = 0
 corners = []
 
 while theta < 2*np.pi - 0.001:
+
+    # To test regular polygons:
+    # r = min(m, n)/2
+    # theta += (2*np.pi)/k
+
     r = np.random.uniform(min_r, max_r)
     x, y = int(r * np.cos(theta)), int(r * np.sin(theta))
     corners.append((x, y))
     theta += np.random.uniform(min_theta, max_theta)
-    #theta += (2*np.pi)/k
+
+
 
 
 # (2) Interpolate between corners
@@ -74,22 +79,28 @@ for i in range(len(corners)):
 
     boundary.extend(side)
 
+# Might want to remove duplicates from boundary
+# (and have set for O(1) lookup!!)
+# (could change to dictionary with boundary fn values?)
+boundary_set = set(boundary)
+boundary = list(boundary_set)
 
 # (3) transform boundary points & mark grid with g(x, y)
 # Boundary origin is grid (m+1, n+1)
 for i in range(len(boundary)):
     p = boundary[i]
     c = int(p[0]) + n
-    r = int(p[1]) + m
-    # grid[r][c] = boundary_function(p)
-    grid[r][c] = 1
+    r = int(p[1]) + n
+    grid[r][c] = boundary_function(p)
+
+
 
 
 # check out what happened:
 for i in range(grid.shape[0]):
     row = ''
     for j in range(grid.shape[1]):
-        if i == m and j == n:
+        if i == j == n:
             row += '[0]'
         elif grid[i][j] == 0:
             row += ' + '
