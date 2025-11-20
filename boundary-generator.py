@@ -4,6 +4,7 @@ import numpy as np
 import noise
 import queue
 import time
+import json
 
 
 n = 512
@@ -125,14 +126,34 @@ for i in range(len(corners)):
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (3) Make the boundary + interior                        #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
+# This is the part that really matters for FDM... We need some kind of output.,
+# and it will be the vectorized boundary and interior, ready for an FDM solve.
+#
+# It was way harder than I thought to round up all the interior points! The
+# algorithm I came up with is a "wall insulation"/"quarantined plague" strategy.
+#
+# (1) We know that the origin is within the boundary, so we put it in a queue.
+# (2) Then, until the queue is empty, we take an item out and check if it is a boundary
+# point. If not, and we haven't already looked at this point, then add it to the
+# interior points set.
+# (3) Then we put its four grid neighbors in queue to be checked; return to (2)
+#
+# Hence, "plague strategy;" each point gets "infected." Thank heavens our boundary
+# is closed! It quarantines the exterior and we end up with all the interior points.
+#
+# FDM doesn't care what ordering we choose for the interior and boundary points.
+#
 
 
 # This is the function inside the boundary, like f on the LHS of the system in FDM
 # For now, for us, it can just return zero.
 def f(p):
-    # This'll make a fun picture:
-    return np.sin(0.08 * (p[0] * p[1]) / n)
+    # This can help us visualize the boundary function:
+    # return boundary_function(p)
 
+    # ... and this will surely make a fun picture, too:
+    return np.sin(0.08 * (p[0] * p[1]) / n)
 
 def get_neighbors(p: Tuple[int, int]) -> List[Tuple[int, int]]:
     """
@@ -165,12 +186,46 @@ while not q.empty():
 tf = time.perf_counter()
 dt = tf - t0
 
+print('****************************************************************')
+print('\tBOUNDARY GENERATION COMPLETE. INTERIOR GENERATION COMPLETE.')
+print('****************************************************************')
 print('Number of interior points:', len(interior_map), f' --> {len(interior_map) / (n * n):.2%} of the {n}x{n} grid.')
 print('Number of boundary points:', len(boundary_map), f' --> {len(boundary_map) / (n * n):.2%} of the {n}x{n} grid.')
-print('Time to compute boundary:', f'~{dt:.4f}s')
+print('Time to compute interior:', f'~{dt:.4f}s')
 print(f'~{(len(interior_map) / dt):.2f} points per second.')
 
 
+# Finally, let's vectorize the boundary and interior:
+# Making it a np.array here in case we want to use that,
+# converting back to a list to json serialize
+boundary_vec = np.array(list(boundary_map.values()))
+interior_vec = np.array(list(interior_map.values()))
+closure_vec = np.concatenate([interior_vec, boundary_vec])  # boundary, then interior--as the book stipulated
+
+# Bam.
+
+# Shall we go so far as to output a json file?
+data = {
+    'boundary_vec': list(boundary_vec),
+    'interior_vec': list(interior_vec),
+    'closure_vec': list(closure_vec)
+}
+filename = 'boundary0.json'
+try:
+    with open(filename, 'w') as f:
+        json.dump(data, f, indent=4)
+        print('****************************************************************')
+        print(f'JSON DATA SUCCESSFULLY SAVED TO: {filename}.')
+        print('****************************************************************')
+except IOError as e:
+    print('****************************************************************')
+    print('ERROR WRITING JSON DATA TO: {filename}')
+    print('****************************************************************')
+
+# Double bam.
+
+
+# Let's get creative:
 # ********************************
 #   DISPLAY AS PIXEL MAP:
 # ********************************
@@ -179,7 +234,6 @@ print(f'~{(len(interior_map) / dt):.2f} points per second.')
 red_window = np.zeros((n, n))
 green_window = np.zeros((n, n))
 blue_window = np.zeros((n, n))
-
 
 # rgb normalize the boundary values:
 boundary_values = np.array([bv for bv in boundary_map.values()])
@@ -204,13 +258,12 @@ for bp, bv in normalized_boundary_map.items():
     green_window[r][c] = bv
     blue_window[r][c] = 0
 
-# Now do the same for the interior
 
+# Now do the same for the interior.
+# It's going to be a real nice addition to the scrapbook.
 interior_values = np.array([iv for iv in interior_map.values()])
 iv_min = np.min(interior_values)
 iv_max = np.max(interior_values)
-
-print(iv_min, iv_max)
 
 normalized_interior_map = {}
 for ip, iv in interior_map.items():
@@ -246,6 +299,7 @@ img.show()
 #             row += ' + '
 #
 #     print(row)
+
 
 
 
