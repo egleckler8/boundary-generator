@@ -210,7 +210,7 @@ data = {
     'interior_vec': list(interior_vec),
     'closure_vec': list(closure_vec)
 }
-filename = 'boundary0.json'
+filename = 'output/boundary0.json'
 try:
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
@@ -279,7 +279,8 @@ for ip, iv in normalized_interior_map.items():
 
 window_stack = np.stack((red_window, green_window, blue_window), axis=2)
 img = Image.fromarray(window_stack.astype('uint8'))
-img.show()
+img.save('imgs/boundary0.png')
+# img.show()
 
 
 # ********************************
