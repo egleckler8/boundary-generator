@@ -6,7 +6,7 @@ import queue
 import time
 
 
-n = 10
+n = 512
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (0) Boundary function                                   #
@@ -126,49 +126,35 @@ for i in range(len(corners)):
 #                       (3) Make the boundary + interior                        #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-# Here's the duplicates-removed boundary set, equipped with boundary values:
-# Python `dict` data type gives O(1) lookup for membership
-boundary_map = {bp: boundary_function(bp) for bp in boundary_points}
 
 # This is the function inside the boundary, like f on the LHS of the system in FDM
 # For now, for us, it can just return zero.
 def f(p):
-    return 0
-
-# Now let's make the interior set.
+    # This'll make a fun picture:
+    return np.sin(0.08 * (p[0] * p[1]) / n)
 
 
 def get_neighbors(p: Tuple[int, int]) -> List[Tuple[int, int]]:
     """
-    Safe get neighbors within nxn grid.
-    Take standard coords input and checks which of its neighbors
-    is within an nxn grid centered on (0,0)
-    :param p: point in standard coords, i.e. (0,0) is the origin
-    :return:
+    Gets the grid neighbors of p in standard coordinates (origin is 0).
+    Totally not index-safe! Please don't use this diretly on an array...
+    :param p: Grid point in standard coordinates
+    :return: Grid neighbors of p
     """
-    # translated_p = (int(p[0] + n / 2), int(p[1] + n / 2))
-    # # Fail if outside boundary
-    # if translated_p[0] < 0 or translated_p[0] >= n or translated_p[1] < 0 or translated_p[1] >= n:
-    #     return []
-    #
-    # neighbors = []
-    # if translated_p[0] > 0:
-    #     neighbors.append((p[0] - 1, p[1]))
-    # if translated_p[0] < n - 1:
-    #     neighbors.append((p[0] + 1, p[1]))
-    # if translated_p[1] > 0:
-    #     neighbors.append((p[0], p[1] - 1))
-    # if translated_p[1] < n - 1:
-    #     neighbors.append((p[0], p[1] - 1))
-    # return neighbors
     return [(p[0] + 1, p[1]), (p[0] - 1, p[1]), (p[0], p[1] + 1), (p[0], p[1] - 1)]
 
-t0 = time.perf_counter()
 
+t0 = time.perf_counter()  # let's see how long this takes in practice... algo is O(n^2) probably
+
+# Here's the duplicates-removed boundary set, equipped with boundary values:
+# Python `dict` data type gives O(1) lookup for membership
+boundary_map = {bp: boundary_function(bp) for bp in boundary_points}
 interior_map = {}
 q = queue.Queue()
-q.put((0,0))
+q.put((0, 0))  # Infect the origin
 
+# Origin infects the whole interior. Boundary quarantines effectively.
+# Huge fan of constant time dict lookup
 while not q.empty():
     p = q.get()
     if p not in boundary_map and p not in interior_map:
@@ -177,20 +163,23 @@ while not q.empty():
             q.put(neighbor)
 
 tf = time.perf_counter()
+dt = tf - t0
 
-print('Number of interior points:', len(interior_map), f'Proportion of {n}x{n} grid:', len(interior_map) / (n * n), sep='\t')
-print('Number of boundary points:', len(boundary_points), f'Proportion of {n}x{n} grid:', len(boundary_points) / (n * n), sep='\t')
-print('Time to compute boundary:', f'~{tf-t0:.4f}s')
-print(f'~{(len(interior_map) / (tf - t0)):.2f} points per second.')
-
-
-
-
+print('Number of interior points:', len(interior_map), f' --> {len(interior_map) / (n * n):.2%} of the {n}x{n} grid.')
+print('Number of boundary points:', len(boundary_map), f' --> {len(boundary_map) / (n * n):.2%} of the {n}x{n} grid.')
+print('Time to compute boundary:', f'~{dt:.4f}s')
+print(f'~{(len(interior_map) / dt):.2f} points per second.')
 
 
 # ********************************
 #   DISPLAY AS PIXEL MAP:
 # ********************************
+
+# We'll layer these to create an RGB image
+red_window = np.zeros((n, n))
+green_window = np.zeros((n, n))
+blue_window = np.zeros((n, n))
+
 
 # rgb normalize the boundary values:
 boundary_values = np.array([bv for bv in boundary_map.values()])
@@ -203,14 +192,11 @@ bv_max = np.max(boundary_values)
 # Then a simple multiplication by 255 puts them into the 8-bit unsigned int range for RGB
 normalized_boundary_map = {}
 for bp, bv in boundary_map.items():
-    normalized_bv = 255*(bv - bv_min)/(bv_max - bv_min)
+    normalized_bv = 255*(bv - bv_min)/(bv_max - bv_min) if bv_max != bv_min else 0
     normalized_boundary_map[bp] = normalized_bv
 
 # Make a "layer" for each RGB color.
 # We can be creative or whatever to make it look nice, e.g. green ==> good, red ==> bad
-red_window = np.zeros((n, n))
-green_window = np.zeros((n, n))
-blue_window = np.zeros((n, n))
 for bp, bv in normalized_boundary_map.items():
     c = int(bp[0] + n / 2)
     r = int(bp[1] + n / 2)
@@ -218,28 +204,48 @@ for bp, bv in normalized_boundary_map.items():
     green_window[r][c] = bv
     blue_window[r][c] = 0
 
+# Now do the same for the interior
+
+interior_values = np.array([iv for iv in interior_map.values()])
+iv_min = np.min(interior_values)
+iv_max = np.max(interior_values)
+
+print(iv_min, iv_max)
+
+normalized_interior_map = {}
+for ip, iv in interior_map.items():
+    normalized_iv = 128*(iv - iv_min)/(iv_max - iv_min) if iv_max != iv_min else 0
+    normalized_interior_map[ip] = normalized_iv
+
+for ip, iv in normalized_interior_map.items():
+    c = int(ip[0] + n / 2)
+    r = int(ip[1] + n / 2)
+    red_window[r][c] = 0
+    green_window[r][c] = 0
+    blue_window[r][c] = iv
+
 window_stack = np.stack((red_window, green_window, blue_window), axis=2)
 img = Image.fromarray(window_stack.astype('uint8'))
-# img.show()
+img.show()
 
 
 # ********************************
 #   DISPLAY IN TERMINAL:
 # ********************************
-grid = np.zeros((n, n))
-for i in range(grid.shape[0]):
-    row = ''
-    for j in range(grid.shape[1]):
-        if i == j == n:
-            row += '[O]'
-        elif (int(i - n / 2), int(j - n / 2)) in boundary_map:
-            row += '[@]'
-        elif (int(i - n / 2), int(j - n / 2)) in interior_map:
-            row += '###'
-        else:
-            row += ' + '
-
-    print(row)
+# grid = np.zeros((n, n))
+# for i in range(grid.shape[0]):
+#     row = ''
+#     for j in range(grid.shape[1]):
+#         if i == j == n:
+#             row += '[O]'
+#         elif (int(i - n / 2), int(j - n / 2)) in boundary_map:
+#             row += '[@]'
+#         elif (int(i - n / 2), int(j - n / 2)) in interior_map:
+#             row += '###'
+#         else:
+#             row += ' + '
+#
+#     print(row)
 
 
 
