@@ -1,11 +1,12 @@
+from typing import List, Tuple
 from PIL import Image
 import numpy as np
 import noise
+import queue
+import time
 
 
-n = 500
-grid = np.zeros((n, n))
-
+n = 10
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (0) Boundary function                                   #
@@ -80,7 +81,7 @@ while theta < 2*np.pi - 0.001:
 # works sorts this out. By having "if" statements
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-boundary = []
+boundary_points = []
 for i in range(len(corners)):
 
     if corners[i][0] != corners[(i+1) % len(corners)][0]:  # x's different, do line
@@ -99,7 +100,7 @@ for i in range(len(corners)):
         x = p1[0]
         while x < p2[0]:
             y = m1*x + b1
-            boundary.append((int(x), int(y)))
+            boundary_points.append((int(x), int(y)))
             x += 1
 
     if corners[i][1] != corners[(i+1) % len(corners)][1]:  # y's different, do line
@@ -117,7 +118,7 @@ for i in range(len(corners)):
         y = p1[1]
         while y < p2[1]:
             x = m2*y + b2
-            boundary.append((int(x), int(y)))
+            boundary_points.append((int(x), int(y)))
             y += 1
 
 
@@ -127,17 +128,69 @@ for i in range(len(corners)):
 
 # Here's the duplicates-removed boundary set, equipped with boundary values:
 # Python `dict` data type gives O(1) lookup for membership
-boundary_map = {bp: boundary_function(bp) for bp in boundary}
+boundary_map = {bp: boundary_function(bp) for bp in boundary_points}
+
+# This is the function inside the boundary, like f on the LHS of the system in FDM
+# For now, for us, it can just return zero.
+def f(p):
+    return 0
 
 # Now let's make the interior set.
-#
-for i in range(n):
-    inside_boundary = False
-    for j in range(n):
-        if (i, j) in boundary_map:
-            inside_boundary = not inside_boundary
 
 
+def get_neighbors(p: Tuple[int, int]) -> List[Tuple[int, int]]:
+    """
+    Safe get neighbors within nxn grid.
+    Take standard coords input and checks which of its neighbors
+    is within an nxn grid centered on (0,0)
+    :param p: point in standard coords, i.e. (0,0) is the origin
+    :return:
+    """
+    # translated_p = (int(p[0] + n / 2), int(p[1] + n / 2))
+    # # Fail if outside boundary
+    # if translated_p[0] < 0 or translated_p[0] >= n or translated_p[1] < 0 or translated_p[1] >= n:
+    #     return []
+    #
+    # neighbors = []
+    # if translated_p[0] > 0:
+    #     neighbors.append((p[0] - 1, p[1]))
+    # if translated_p[0] < n - 1:
+    #     neighbors.append((p[0] + 1, p[1]))
+    # if translated_p[1] > 0:
+    #     neighbors.append((p[0], p[1] - 1))
+    # if translated_p[1] < n - 1:
+    #     neighbors.append((p[0], p[1] - 1))
+    # return neighbors
+    return [(p[0] + 1, p[1]), (p[0] - 1, p[1]), (p[0], p[1] + 1), (p[0], p[1] - 1)]
+
+t0 = time.perf_counter()
+
+interior_map = {}
+q = queue.Queue()
+q.put((0,0))
+
+while not q.empty():
+    p = q.get()
+    if p not in boundary_map and p not in interior_map:
+        interior_map[p] = f(p)
+        for neighbor in get_neighbors(p):
+            q.put(neighbor)
+
+tf = time.perf_counter()
+
+print('Number of interior points:', len(interior_map), f'Proportion of {n}x{n} grid:', len(interior_map) / (n * n), sep='\t')
+print('Number of boundary points:', len(boundary_points), f'Proportion of {n}x{n} grid:', len(boundary_points) / (n * n), sep='\t')
+print('Time to compute boundary:', f'~{tf-t0:.4f}s')
+print(f'~{(len(interior_map) / (tf - t0)):.2f} points per second.')
+
+
+
+
+
+
+# ********************************
+#   DISPLAY AS PIXEL MAP:
+# ********************************
 
 # rgb normalize the boundary values:
 boundary_values = np.array([bv for bv in boundary_map.values()])
@@ -167,23 +220,26 @@ for bp, bv in normalized_boundary_map.items():
 
 window_stack = np.stack((red_window, green_window, blue_window), axis=2)
 img = Image.fromarray(window_stack.astype('uint8'))
-img.show()
+# img.show()
 
 
 # ********************************
 #   DISPLAY IN TERMINAL:
 # ********************************
+grid = np.zeros((n, n))
+for i in range(grid.shape[0]):
+    row = ''
+    for j in range(grid.shape[1]):
+        if i == j == n:
+            row += '[O]'
+        elif (int(i - n / 2), int(j - n / 2)) in boundary_map:
+            row += '[@]'
+        elif (int(i - n / 2), int(j - n / 2)) in interior_map:
+            row += '###'
+        else:
+            row += ' + '
 
-# for i in range(grid.shape[0]):
-#     row = ''
-#     for j in range(grid.shape[1]):
-#         if i == j == n:
-#             row += '[O]'
-#         elif grid[i][j] == 0:
-#             row += ' + '
-#         else:
-#             row += f'[{int(round(grid[i][j]))}]'
-#     print(row)
+    print(row)
 
 
 
