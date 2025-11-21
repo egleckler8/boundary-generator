@@ -8,7 +8,7 @@ import time
 import json
 
 
-n = 16
+n = 25
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (0) Boundary function                                   #
@@ -240,7 +240,7 @@ print('****************************************************************')
 #                       (3) Vectorize interior & boundary                       #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
-# We need all the components of "Au = A'g + f"
+# We need all the components of "Au = Ahat*g + f"
 #
 
 # (1) f vector - interior values
@@ -254,10 +254,9 @@ for bp in boundary_idx:
     g_vec[boundary_idx[bp]] = g(bp)
 
 
-# (3) A' matrix. Use CSR format because it's pretty big.
-# TODO
 
-# (4) The mighty A matrix. Use CSR format because it's HUGE.
+
+# (3 + 4) A and Ahat at the same time!
 
 # We shall first assemble COO matrix with (row, col, val),
 # then turn that into a CSR matrix to efficiently store sparse data
@@ -271,67 +270,55 @@ w2 = [0.225, 0.325, 0.125, 0.125]
 # This is the walker we choose just for testing:
 walker = w1
 
-rows = []
-cols = []
-vals = []
+A_rows = []
+A_cols = []
+A_vals = []
+Ahat_rows = []
+Ahat_cols = []
+# all values in Ahat are -1, so no need for an `Ahat_vals`
+
 for ip, idx in interior_idx.items():
 
-    # Each row will correspond to an interior point,
-    # and it will have at most five entries.
-    # Note: we will have to convert Z^2 points to grid indices
+    # The point itself is always marked in A, and it should be -1
+    A_rows.append(idx)
+    A_cols.append(idx)
+    A_vals.append(-1)
 
-    # One is for point itself, and it should be -1
-    rows.append(idx)
-    cols.append(idx)
-    vals.append(-1)
-
-    # There will be at most four more, one for each neighbor
+    # There will be at most four more, one for each stencil neighbor
     neighbors = get_neighbors(ip)
     for i, neighbor in enumerate(neighbors):
-        if neighbor not in boundary_idx:
+
+        # Stencil point is boundary, belongs on RHS of equation
+        if neighbor in boundary_idx:
+            Ahat_rows.append(idx)
+            Ahat_cols.append(boundary_idx[neighbor])
+
+        # Stencil point is interior, belongs on LHS of equation
+        else:
             # neighbors and walkers both ordered by [n, s, e, w]!!
-            rows.append(idx)
-            cols.append(interior_idx[neighbor])
-            vals.append(walker[i])
-
-# Make the COO matrix
-# print(f'should be dimension {len(interior_idx)}x{len(interior_idx)}')
-# print('rows', len(rows), rows)
-# print('cols', len(cols), cols)
-# print(len(vals))
-A = coo_matrix((vals, (rows, cols)), shape=(len(interior_idx), len(interior_idx)))
-
-print(A)
-# Convert to csr
-A = A.tocsr()
-
-# Bam.
-
-# Shall we go so far as to output a json file?
-# data = {
-#     'boundary_vec': list(boundary_vec),
-#     'interior_vec': list(interior_vec),
-#     'closure_vec': list(closure_vec)
-# }
-# filename = 'output/boundary0.json'
-# try:
-#     with open(filename, 'w') as f:
-#         json.dump(data, f, indent=4)
-#         print('****************************************************************')
-#         print(f'JSON DATA SUCCESSFULLY SAVED TO: {filename}.')
-#         print('****************************************************************')
-# except IOError as e:
-#     print('****************************************************************')
-#     print('ERROR WRITING JSON DATA TO: {filename}')
-#     print('****************************************************************')
-
-# Double bam.
+            A_rows.append(idx)
+            A_cols.append(interior_idx[neighbor])
+            A_vals.append(walker[i])
 
 
-# Let's get creative:
+Ahat_vals = [1] * len(Ahat_rows)
+
+# COOrdinate matrices from scipy.sparse allow us to efficiently construct
+# sparse matrices. They're not very good data structures for doing linalg,
+# but we can easily convert them to CSR or CSC (Compressed Pparse Row/Column)
+# matrices down the line so we're not actually swinging enormous matrices around
+A = coo_matrix((A_vals, (A_rows, A_cols)), shape=(len(interior_idx), len(interior_idx)))
+Ahat = coo_matrix(([1] * len(Ahat_rows), (Ahat_rows, Ahat_cols)), shape=(len(interior_idx), len(boundary_idx)))
+# A = A.tocsr()
+# Ahat = Ahat.tocsr()
+
+
+# Now, et's get creative:
 # ********************************
 #   DISPLAY AS PIXEL MAP:
 # ********************************
+
+# Converts array index to Z^2 point
 def grid(i: int) -> int:
     return int(i - n/2 + 0.5)
 
