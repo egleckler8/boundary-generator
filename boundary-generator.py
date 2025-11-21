@@ -1,5 +1,5 @@
 from typing import List, Tuple
-from scipy.sparse import csr_matrix
+from scipy.sparse import *
 from PIL import Image
 import numpy as np
 import noise
@@ -184,9 +184,9 @@ def get_neighbors(p: Tuple[int, int]) -> List[Tuple[int, int]]:
     Gets the grid neighbors of p in standard coordinates (origin is 0).
     Totally not index-safe! Please don't use this directly on an array...
     :param p: Grid point in standard coordinates
-    :return: Grid neighbors of p
+    :return: Grid neighbors of p in the order [N, S, E, W]
     """
-    return [(p[0] + 1, p[1]), (p[0] - 1, p[1]), (p[0], p[1] + 1), (p[0], p[1] - 1)]
+    return [(p[0], p[1] + 1), (p[0], p[1] - 1), (p[0] + 1, p[1]), (p[0] - 1, p[1])]
 
 
 t0 = time.perf_counter()  # let's see how long this takes in practice... algo is O(n^2) probably
@@ -249,6 +249,8 @@ for bp in boundary_idx:
 
 # (4) The mighty A matrix. Use CSR format because it's HUGE.
 # TODO
+# Assemble COO matrix with (row, col, val)
+# Convert to csr
 
 # Bam.
 
