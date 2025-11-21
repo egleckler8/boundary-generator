@@ -181,9 +181,9 @@ def f(p: Tuple[int, int]) -> float:
 
 def get_neighbors(p: Tuple[int, int]) -> List[Tuple[int, int]]:
     """
-    Gets the grid neighbors of p in standard coordinates (origin is 0).
+    Gets the grid neighbors of p in standard Z^2 coordinates (origin is 0).
     Totally not index-safe! Please don't use this directly on an array...
-    :param p: Grid point in standard coordinates
+    :param p: Grid point in standard Z^2 coordinates
     :return: Grid neighbors of p in the order [N, S, E, W]
     """
     return [(p[0], p[1] + 1), (p[0], p[1] - 1), (p[0] + 1, p[1]), (p[0] - 1, p[1])]
@@ -280,54 +280,63 @@ for bp in boundary_idx:
 #   DISPLAY AS PIXEL MAP:
 # ********************************
 
-# We'll layer these to create an RGB image
-red_window = np.zeros((n, n))
-green_window = np.zeros((n, n))
-blue_window = np.zeros((n, n))
+def make_img(show_bv=True, show_iv=True):
+    """
+    Makes a cool picture of the boundary
+    :param show_bv: Whether to show the boundary function values
+    :param show_iv: Whether to show the interior function values
+    :return: Image object for saving or showing. (hint: img = make_img(); img.show())
+    """
+    # We'll layer these to create an RGB image
+    red_window = np.zeros((n, n))
+    green_window = np.zeros((n, n))
+    blue_window = np.zeros((n, n))
+
+    # We need to make a map [-1, 1] --> [0, 255].
+    # For enhanced visualization, we first min-max normalize the boundary values,
+    # linearly squeezing them into to fit perfectly into [0, 1] (min +-> 0, max +-> 1)
+    # Then a simple multiplication by 255 puts them into the 8-bit unsigned int range for RGB
+    bv_min = np.min(g_vec)
+    bv_max = np.max(g_vec)
+    normalized_boundary_values = np.zeros_like(g_vec)
+    for i in range(len(g_vec)):
+        # In case we just want the un-normalized values
+        # normalized_boundary_values[i] = g_vec[i]
+        if show_bv:
+            normalized_boundary_values[i] = 255*(g_vec[i] - bv_min)/(bv_max - bv_min) if bv_max != bv_min else 0
+        # else it will remain zero
+
+    # Make a "layer" for each RGB color.
+    # We can be creative or whatever to make it look nice, e.g. green ==> good, red ==> bad
+    for bp, idx in boundary_idx.items():
+        c = int(bp[0] + n / 2)              # x-axis goes left --> right
+        r = (n - 1) - int(bp[1] + n / 2)    # y-axis goes bottom --> top
+        red_window[r][c] = 255 - normalized_boundary_values[idx]
+        green_window[r][c] = normalized_boundary_values[idx] if show_bv else 255
+        blue_window[r][c] = 0 if show_bv else 255
+
+    # Now do the same for the interior.
+    # It's going to be a real nice addition to the scrapbook.
+    iv_min = np.min(f_vec)
+    iv_max = np.max(f_vec)
+    normalized_interior_values = np.zeros_like(f_vec)
+    for i in range(len(f_vec)):
+        if show_iv:
+            normalized_interior_values[i] = 128*(f_vec[i] - iv_min)/(iv_max - iv_min) if iv_max != iv_min else 0
+        # else it will remain zero and hence be a black pixel
+
+    for ip, idx in interior_idx.items():
+        c = int(ip[0] + n / 2)              # x-axis goes left --> right
+        r = (n - 1) - int(ip[1] + n / 2)    # y-axis goes bottom --> top
+        red_window[r][c] = 16 if show_iv else 0
+        green_window[r][c] = 16 if show_iv else 0
+        blue_window[r][c] = normalized_interior_values[idx]
+
+    window_stack = np.stack((red_window, green_window, blue_window), axis=2)
+    return Image.fromarray(window_stack.astype('uint8'))
 
 
-# We need to make a map [-1, 1] --> [0, 255].
-# For enhanced visualization, we first min-max normalize the boundary values,
-# linearly squeezing them into to fit perfectly into [0, 1] (min +-> 0, max +-> 1)
-# Then a simple multiplication by 255 puts them into the 8-bit unsigned int range for RGB
-bv_min = np.min(g_vec)
-bv_max = np.max(g_vec)
-normalized_boundary_values = np.zeros_like(g_vec)
-for i in range(len(g_vec)):
-    # In case we just want the un-normalized values
-    # normalized_boundary_values[i] = g_vec[i]
-
-    normalized_boundary_values[i] = 255*(g_vec[i] - bv_min)/(bv_max - bv_min) if bv_max != bv_min else 0
-
-
-# Make a "layer" for each RGB color.
-# We can be creative or whatever to make it look nice, e.g. green ==> good, red ==> bad
-for bp, idx in boundary_idx.items():
-    c = int(bp[0] + n / 2)              # x-axis goes left --> right
-    r = (n - 1) - int(bp[1] + n / 2)    # y-axis goes bottom --> top
-    red_window[r][c] = 255 - normalized_boundary_values[idx]
-    green_window[r][c] = normalized_boundary_values[idx]
-    blue_window[r][c] = 0
-
-
-# Now do the same for the interior.
-# It's going to be a real nice addition to the scrapbook.
-iv_min = np.min(f_vec)
-iv_max = np.max(f_vec)
-
-normalized_interior_values = np.zeros_like(f_vec)
-for i in range(len(f_vec)):
-    normalized_interior_values[i] = 128*(f_vec[i] - iv_min)/(iv_max - iv_min) if iv_max != iv_min else 0
-
-for ip, idx in interior_idx.items():
-    c = int(ip[0] + n / 2)              # x-axis goes left --> right
-    r = (n - 1) - int(ip[1] + n / 2)    # y-axis goes bottom --> top
-    red_window[r][c] = 16
-    green_window[r][c] = 16
-    blue_window[r][c] = normalized_interior_values[idx]
-
-window_stack = np.stack((red_window, green_window, blue_window), axis=2)
-img = Image.fromarray(window_stack.astype('uint8'))
+img = make_img()
 img.save('imgs/boundary0.png')
 img.show()
 
@@ -340,51 +349,59 @@ img.show()
 
 # The rows will print backwards so origin is bottom left
 
-s = ''
+def to_string():
+    s = ''
 
-for y in range(n - 1, 0, -1):
+    for y in range(n - 1, 0, -1):
 
-    # Start out the row with the y-value
-    row = str(int(y - n/2)) + '\t'
+        # Start out the row with the y-value
+        row = str(int(y - n/2)) + '\t'
 
+        for x in range(n):
+
+            # Marking origin
+            if x == y == n:
+                row += '[O]'
+
+            # Marking boundary
+            elif (int(x - n / 2), int(y - n / 2)) in boundary_idx:
+                # Below is a good way to visualize the boundary values in the grid, but it's broken
+                # as of the creation of "get_image," which hides the scope of `normalized_boundary_values`
+                # bv_for_display = str(int(normalized_boundary_values[boundary_idx[int(x - n/2), int(y - n/2)]]))
+                # row += f'{str(bv_for_display)}   '[:3]
+
+                row += '[@]'
+
+
+
+            # Marking interior
+            elif (int(x - n / 2), int(y - n / 2)) in interior_idx:
+                row += '###'
+
+            # If the grid is big enough, maybe some vertical axes will look nice?
+            # Or not... it does kind of clutter things up.
+            # elif x == int(n/2) and n > 32:
+            #     row += '-|-'
+            #
+            # elif y == int(n/2) and n > 32:
+            #     row += '-+-'
+
+            # Marking exterior
+            else:
+                row += ' + '
+                # row += f'({x},{y})'
+
+        s += row + '\n'
+
+    # The bottom row will be x-values
+    row0 = '0\t'
     for x in range(n):
+        row0 += f'{int(x  - n/2) }   '[:3]
+    s += row0 + '\n'
 
-        # Marking origin
-        if x == y == n:
-            row += '[O]'
+    return s
 
-        # Marking boundary
-        elif (int(x - n / 2), int(y - n / 2)) in boundary_idx:
-            # row += '[@]'
-            bv_for_display = str(int(normalized_boundary_values[boundary_idx[int(x - n/2), int(y - n/2)]]))
-            row += f'{str(bv_for_display)}   '[:3]
-
-        # Marking interior
-        elif (int(x - n / 2), int(y - n / 2)) in interior_idx:
-            row += '###'
-
-        # If the grid is big enough, maybe some vertical axes will look nice?
-        # Or not... it does kind of clutter things up.
-        # elif x == int(n/2) and n > 32:
-        #     row += '-|-'
-        #
-        # elif y == int(n/2) and n > 32:
-        #     row += '-+-'
-
-        # Marking exterior
-        else:
-            row += ' + '
-            # row += f'({x},{y})'
-
-    s += row + '\n'
-
-# The bottom row will be x-values
-row0 = '0\t'
-for x in range(n):
-    row0 += f'{int(x  - n/2) }   '[:3]
-s += row0 + '\n'
-
-# print(s)
+# print(to_string())
 
 
 
