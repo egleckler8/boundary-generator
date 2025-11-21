@@ -8,7 +8,7 @@ import time
 import json
 
 
-n = 501
+n = 39
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (0) Boundary function                                   #
@@ -30,7 +30,7 @@ def g(p: Tuple[float, float]) -> float:
     :return: g(p)
     """
     # This can help us check that everything is in order
-    # return p[0]
+    return p[0]
 
     # The following will sample from smooth noise:
     scale = 2
@@ -64,7 +64,7 @@ def generate_corners(theta_0: float = 0,
                      max_r = 0.5*n - 1,
                      min_r = 0.25*n) -> List[Tuple[int, int]]:
     theta = theta_0
-    corners = []
+    C = []
 
     # Never forget about numerical error...
     while theta < theta_f - 0.001:
@@ -75,10 +75,11 @@ def generate_corners(theta_0: float = 0,
 
         r = np.random.uniform(min_r, max_r)
         x, y = int(r * np.cos(theta)), int(r * np.sin(theta))
-        corners.append((x, y))
+        C.append((x, y))
         theta += np.random.uniform(min_theta, max_theta)
 
-    return corners
+    return C
+
 
 corners = generate_corners()
 
@@ -110,6 +111,7 @@ corners = generate_corners()
 boundary_set = set()
 
 for i in range(len(corners)):
+
     if corners[i][0] != corners[(i+1) % len(corners)][0]:
 
         # Look at the points bottom-to-top
@@ -354,7 +356,7 @@ def make_img(show_bv=True, show_iv=True):
         # In case we just want the un-normalized values
         # normalized_boundary_values[i] = g_vec[i]
         if show_bv:
-            normalized_boundary_values[i] = 255*(g_vec[i] - bv_min)/(bv_max - bv_min) if bv_max != bv_min else 0
+            normalized_boundary_values[i] = int(255*(g_vec[i] - bv_min)/(bv_max - bv_min)) if bv_max != bv_min else 0
         # else it will remain zero
 
     # Make a "layer" for each RGB color.
@@ -386,7 +388,7 @@ def make_img(show_bv=True, show_iv=True):
     window_stack = np.stack((red_window, green_window, blue_window), axis=2)
     return Image.fromarray(window_stack.astype('uint8'))
 
-
+corners = set(corners)
 # ********************************
 #   DISPLAY IN TERMINAL:
 # ********************************
@@ -450,7 +452,7 @@ def to_string():
 img = make_img()
 img.save('imgs/boundary0.png')
 img.show()
-# print(to_string())
+print(to_string())
 
 
 
