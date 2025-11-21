@@ -25,7 +25,7 @@ n = 40
 
 def g(p: Tuple[int, int]) -> float:
 
-    return 1.5 / (p[0] - n)
+    return p[0]
     scale = 2
     z = 8.88  # seed z for reproducibility?
     # below, adding 0.08 so that it's NEVER an integer: integer coords always return zero
@@ -83,17 +83,23 @@ while theta < 2*np.pi - 0.001:
 #
 # This can be solved by also making a line x = my + b, and for each y between the
 # points, marking the appropriate x = my + b on the grid. The way the rounding
-# works sorts this out. By having "if" statements
+# works sorts this out. The "if" statements make sure the boundary is closed.
+#
+# ESSENTIALLY, THOUGH--we check the boundary index set so we never overwrite
+# points that are already in the boundary! This will totally screw up the
+# evaluation of the boundary function because the points from "y = mx + b"
+# will end up with a different boundary values than "x = ym + b" because of
+# weird rounding stuff. Thankfully checking set membership is O(1).
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# boundary_idx = {}
-boundary_points = []
+boundary_idx = {}
 
 for i in range(len(corners)):
 
-    if corners[i][0] != corners[(i+1) % len(corners)][0]:  # x's different, do line
+    # x's different, do "y = mx + b" between corners
+    if corners[i][0] != corners[(i+1) % len(corners)][0]:
 
-        # look at the points left-to-right
+        # Look at the points left-to-right
         if corners[i][0] < corners[(i+1) % len(corners)][0]:
             p1, p2 = corners[i], corners[(i+1) % len(corners)]
         else:
@@ -103,17 +109,18 @@ for i in range(len(corners)):
         m1 = (p2[1] - p1[1])/(p2[0] - p1[0])
         b1 = p2[1] - m1 * p2[0]
 
-        # increment x one at a time and plot y
+        # Increment x one at a time and plot y
         x = p1[0]
         while x < p2[0]:
             y = m1*x + b1
-            boundary_points.append((int(x), int(y)))
-            # boundary_idx[(int(x), int(y))] = len(boundary_idx) - 1
+            if (int(x), int(y)) not in boundary_idx:
+                boundary_idx[(int(x), int(y))] = len(boundary_idx) - 1
             x += 1
 
-    if corners[i][1] != corners[(i+1) % len(corners)][1]:  # y's different, do line
+    # y's different, do "x = my + b" between corners for good measure
+    if corners[i][1] != corners[(i+1) % len(corners)][1]:
 
-        # look at the points bottom-to-top
+        # Look at the points bottom-to-top
         if corners[i][1] < corners[(i+1) % len(corners)][1]:
             p1, p2 = corners[i], corners[(i+1) % len(corners)]
         else:
@@ -126,8 +133,8 @@ for i in range(len(corners)):
         y = p1[1]
         while y < p2[1]:
             x = m2*y + b2
-            boundary_points.append((int(x), int(y)))
-            # boundary_idx[(int(x), int(y))] = len(boundary_idx) - 1
+            if (int(x), int(y)) not in boundary_idx:
+                boundary_idx[(int(x), int(y))] = len(boundary_idx) - 1
             y += 1
 
 
@@ -179,9 +186,9 @@ t0 = time.perf_counter()  # let's see how long this takes in practice... algo is
 
 # Here's the duplicates-removed boundary set, equipped with an ordering.
 # Python `dict` data type gives O(1) lookup for membership
-boundary_idx = {}
-for bp in boundary_points:
-    boundary_idx[bp] = len(boundary_idx) - 1
+# boundary_idx = {}
+# for bp in boundary_points:
+#     boundary_idx[bp] = len(boundary_idx) - 1
 
 interior_idx = {}
 q = queue.Queue()
@@ -281,12 +288,14 @@ normalized_boundary_values = np.zeros_like(g_vec)
 for i in range(len(g_vec)):
     normalized_boundary_values[i] = 255*(g_vec[i] - bv_min)/(bv_max - bv_min) if bv_max != bv_min else 0
 
+    # In case we just want the un-normalized values
+    # normalized_boundary_values[i] = g_vec[i]
+
 # Make a "layer" for each RGB color.
 # We can be creative or whatever to make it look nice, e.g. green ==> good, red ==> bad
 for bp, idx in boundary_idx.items():
     c = int(bp[0] + n / 2)              # x-axis goes left --> right
     r = (n - 1) - int(bp[1] + n / 2)    # y-axis goes bottom --> top
-    #r, c = plane_to_array(bp)
     red_window[r][c] = 255 - normalized_boundary_values[idx]
     green_window[r][c] = normalized_boundary_values[idx]
     blue_window[r][c] = 0
@@ -311,42 +320,57 @@ for ip, idx in interior_idx.items():
 window_stack = np.stack((red_window, green_window, blue_window), axis=2)
 img = Image.fromarray(window_stack.astype('uint8'))
 img.save('imgs/boundary0.png')
-img.show()
+# img.show()
 
 
 # ********************************
 #   DISPLAY IN TERMINAL:
 # ********************************
-grid = np.zeros((n, n))
+# NOTE: this gets slightly messed up when n >= 200 because "100" is three digits
+# and this function displays the grid values from [-(n/2), (n/2) - 1]
 
-row0 = '0\t'
-for x in range(n):
-    row0 += f' {x + 1} '[:3]
-rows = [row0]
+# The rows will print backwards so origin is bottom left
+for y in range(n - 1, 0, -1):
 
-for y in range(n):
-    row = f'{y + 1}\t'
+    # Start out the row with the y-value
+    row = str(int(y - n/2)) + '\t'
+
     for x in range(n):
+
+        # Marking origin
         if x == y == n:
             row += '[O]'
+
+        # Marking boundary
         elif (int(x - n / 2), int(y - n / 2)) in boundary_idx:
             # row += '[@]'
-            row += f'{str(round(normalized_boundary_values[boundary_idx[int(x - n / 2), int(y - n / 2)]]))} '[:3]
-            # while len(s) < 3:
-            #     s = '0' + s
-            # row += s
+            bv_for_display = str(int(normalized_boundary_values[boundary_idx[int(x - n/2), int(y - n/2)]]))
+            row += f'{str(bv_for_display)}   '[:3]
+
+        # Marking interior
         elif (int(x - n / 2), int(y - n / 2)) in interior_idx:
             row += '###'
+
+        # If the grid is big enough, maybe some vertical axes will look nice?
+        # Or not... it does kind of clutter things up.
+        # elif x == int(n/2) and n > 32:
+        #     row += '-|-'
+        #
+        # elif y == int(n/2) and n > 32:
+        #     row += '-+-'
+
+        # Marking exterior
         else:
             row += ' + '
             # row += f'({x},{y})'
 
-    rows.append(row)
+    print(row)
 
-
-# Print so origin is bottom left, as we'd expect
-for i in range(n):
-    print(rows[n - 1 - i])
+# The bottom row will be x-values
+row0 = '0\t'
+for x in range(n):
+    row0 += f'{int(x  - n/2) }   '[:3]
+print(row0)
 
 
 
