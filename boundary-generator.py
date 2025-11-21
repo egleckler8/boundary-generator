@@ -8,7 +8,7 @@ import time
 import json
 
 
-n = 8
+n = 16
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (0) Boundary function                                   #
@@ -99,7 +99,7 @@ while theta < 2*np.pi - 0.001:
 # weird rounding stuff. Thankfully checking set membership is O(1).
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-boundary_idx = {}
+boundary_set = set()
 
 for i in range(len(corners)):
 
@@ -120,8 +120,8 @@ for i in range(len(corners)):
         x = p1[0]
         while x < p2[0]:
             y = m1*x + b1
-            if (int(x), int(y)) not in boundary_idx:
-                boundary_idx[(int(x), int(y))] = len(boundary_idx)
+            if (int(x), int(y)) not in boundary_set:
+                boundary_set.add((int(x), int(y)))
             x += 1
 
     # y's different, do "x = my + b" between corners for good measure
@@ -140,8 +140,8 @@ for i in range(len(corners)):
         y = p1[1]
         while y < p2[1]:
             x = m2*y + b2
-            if (int(x), int(y)) not in boundary_idx:
-                boundary_idx[(int(x), int(y))] = len(boundary_idx)
+            if (int(x), int(y)) not in boundary_set:
+                boundary_set.add((int(x), int(y)))
             y += 1
 
 
@@ -163,6 +163,12 @@ for i in range(len(corners)):
 #
 # Hence, "plague strategy;" each point gets "infected." Thank heavens our boundary
 # is closed! It quarantines the exterior, and we end up with all the interior points.
+#
+# In addition, we build a minimal boundary set. It could happen that above we
+# generate a boundary that is "two points thick" at some points," an easy
+# example to imagine would be very spiky corners. Now, as we go through all
+# the interior points, we can finally choose the boundary to be only the points
+# in the generated boundary set that are reachable by moving from the interior
 #
 # FDM doesn't care what ordering we choose for the interior and boundary points.
 #
@@ -191,23 +197,32 @@ def get_neighbors(p: Tuple[int, int]) -> List[Tuple[int, int]]:
 
 t0 = time.perf_counter()  # let's see how long this takes in practice... algo is O(n^2) probably
 
-interior_idx = {}
-q = queue.Queue()
-q.put((0, 0))  # Infect the origin
-
 # Origin infects the whole interior. Boundary quarantines effectively.
-# Huge fan of constant time dict lookup
+# Keep on the relevant boundary points.
+# Huge fan of constant time dict lookup.
+interior_idx = {}
+boundary_idx = {}
+q = queue.Queue()
+q.put((0, 0))
+
 while not q.empty():
     p = q.get()
-    if p not in boundary_idx and p not in interior_idx:
+    if p not in boundary_set:
+        if p not in interior_idx:
 
-        # Setting the dict entry to the size of the set at the time gives
-        # us an ordering on the interior. Now we can map each point to
-        # its index in a vector. Will come in clutch when we vectorize D
-        interior_idx[p] = len(interior_idx)
+            # Setting the dict entry to the size of the set at the time gives
+            # us an ordering on the interior. Now we can map each point to
+            # its index in a vector. Will come in clutch when we vectorize D
+            interior_idx[p] = len(interior_idx)
 
-        for neighbor in get_neighbors(p):
-            q.put(neighbor)
+            for neighbor in get_neighbors(p):
+                q.put(neighbor)
+
+    # Here we are constructing a minimal boundary, including on the
+    # points that the interior points are touching.
+    else:
+        boundary_idx[p] = len(boundary_idx)
+
 
 tf = time.perf_counter()
 dt = tf - t0
@@ -256,8 +271,6 @@ w2 = [0.225, 0.325, 0.125, 0.125]
 # This is the walker we choose just for testing:
 walker = w1
 
-messages = []
-
 rows = []
 cols = []
 vals = []
@@ -287,10 +300,10 @@ for ip, idx in interior_idx.items():
 # print('cols', len(cols), cols)
 # print(len(vals))
 A = coo_matrix((vals, (rows, cols)), shape=(len(interior_idx), len(interior_idx)))
+
 print(A)
-
-
 # Convert to csr
+A = A.tocsr()
 
 # Bam.
 
@@ -319,6 +332,9 @@ print(A)
 # ********************************
 #   DISPLAY AS PIXEL MAP:
 # ********************************
+def grid(i: int) -> int:
+    return int(i - n/2 + 0.5)
+
 
 def make_img(show_bv=True, show_iv=True):
     """
@@ -349,8 +365,8 @@ def make_img(show_bv=True, show_iv=True):
     # Make a "layer" for each RGB color.
     # We can be creative or whatever to make it look nice, e.g. green ==> good, red ==> bad
     for bp, idx in boundary_idx.items():
-        c = int(bp[0] + n / 2)              # x-axis goes left --> right
-        r = (n - 1) - int(bp[1] + n / 2)    # y-axis goes bottom --> top
+        c = int(bp[0] + (n-1)/2)              # x-axis goes left --> right
+        r = (n - 1) - int(bp[1] + (n-1)/2)    # y-axis goes bottom --> top
         red_window[r][c] = 255 - normalized_boundary_values[idx]
         green_window[r][c] = normalized_boundary_values[idx] if show_bv else 255
         blue_window[r][c] = 0 if show_bv else 255
@@ -366,8 +382,8 @@ def make_img(show_bv=True, show_iv=True):
         # else it will remain zero and hence be a black pixel
 
     for ip, idx in interior_idx.items():
-        c = int(ip[0] + n / 2)              # x-axis goes left --> right
-        r = (n - 1) - int(ip[1] + n / 2)    # y-axis goes bottom --> top
+        c = int(ip[0] + (n-1)/2)              # x-axis goes left --> right
+        r = (n - 1) - int(ip[1] + (n-1)/2)    # y-axis goes bottom --> top
         red_window[r][c] = 16 if show_iv else 0
         green_window[r][c] = 16 if show_iv else 0
         blue_window[r][c] = normalized_interior_values[idx]
@@ -376,9 +392,9 @@ def make_img(show_bv=True, show_iv=True):
     return Image.fromarray(window_stack.astype('uint8'))
 
 
-img = make_img()
-img.save('imgs/boundary0.png')
-img.show()
+# img = make_img()
+# img.save('imgs/boundary0.png')
+# img.show()
 
 
 # ********************************
@@ -393,35 +409,32 @@ def to_string():
     s = ''
 
     for y in range(n - 1, 0, -1):
+        yz = grid(y)
 
         # Start out the row with the y-value
-        row = str(int(y - n/2)) + '\t'
+        row = str(yz) + '\t'
 
         for x in range(n):
-
-            # Marking origin
-            if x == y == n:
-                row += '[O]'
+            xz = grid(x)
 
             # Marking boundary
-            elif (int(x - n / 2), int(y - n/2)) in boundary_idx:
-                # Below is a good way to visualize the boundary values in the grid, but it's broken
-                # as of the creation of "get_image," which hides the scope of `normalized_boundary_values`
-                # bv_for_display = str(int(normalized_boundary_values[boundary_idx[int(x - n/2), int(y - n/2)]]))
-                # row += f'{str(bv_for_display)}   '[:3]
-
+            if (xz, yz) in boundary_idx:
                 row += '[@]'
 
             # Marking interior
-            elif (int(x - n / 2), int(y - n/2)) in interior_idx:
-                row += ' # '
+            elif (xz, yz) in interior_idx:
+                # Marking origin, if that's where we be
+                if xz == yz == 0:
+                    row += ' 0 '
+                else:
+                    row += ' # '
 
             # If the grid is big enough, maybe some vertical axes will look nice?
             # Or not... it does kind of clutter things up.
-            # elif x == int(n/2) and n > 32:
+            # elif x == int((n-1)/2) and n > 32:
             #     row += '-|-'
             #
-            # elif y == int(n/2) and n > 32:
+            # elif y == int((n-1)/2) and n > 32:
             #     row += '-+-'
 
             # Marking exterior
@@ -432,9 +445,10 @@ def to_string():
         s += row + '\n'
 
     # The bottom row will be x-values
-    row0 = '0\t'
+    row0 = str(grid(0)) + '\t'
     for x in range(n):
-        row0 += f'{int(x  - n/2) }   '[:3]
+        # row0 += str(grid(x+1)).center(3)
+        row0 += str(grid(x)).center(3)
     s += row0 + '\n'
 
     return s
