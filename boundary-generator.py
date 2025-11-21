@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Set
 from scipy.sparse import *
 from PIL import Image
 import numpy as np
@@ -8,7 +8,7 @@ import time
 import json
 
 
-n = 25
+n = 8
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (0) Boundary function                                   #
@@ -45,12 +45,6 @@ def g(p: Tuple[float, float]) -> float:
     return e
 
 
-max_theta = np.pi / 2
-min_theta = np.arctan2(2, n)  # as n gets bigger, we could afford more minute turns
-max_r = 0.5*n - 1
-min_r = 0.25*n
-
-
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (1) Place markers on the corners                        #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -61,19 +55,32 @@ min_r = 0.25*n
 # a goldilocks zone: not too erratic, and not too regular
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-theta = 0
-corners = []
 
-while theta < 2*np.pi - 0.001:
 
-    # To test regular polygons:
-    # r = min(m, n)/2
-    # theta += (2*np.pi)/k
+def generate_corners(theta_0: float = 0,
+                     theta_f: float = 2*np.pi,
+                     max_theta: float = np.pi/2,
+                     min_theta: float = np.arctan2(2, n),
+                     max_r = 0.5*n - 1,
+                     min_r = 0.25*n) -> List[Tuple[int, int]]:
+    theta = theta_0
+    corners = []
 
-    r = np.random.uniform(min_r, max_r)
-    x, y = int(r * np.cos(theta)), int(r * np.sin(theta))
-    corners.append((x, y))
-    theta += np.random.uniform(min_theta, max_theta)
+    # Never forget about numerical error...
+    while theta < theta_f - 0.001:
+
+        # To test regular polygons:
+        # r = min(m, n)/2
+        # theta += (2*np.pi)/k
+
+        r = np.random.uniform(min_r, max_r)
+        x, y = int(r * np.cos(theta)), int(r * np.sin(theta))
+        corners.append((x, y))
+        theta += np.random.uniform(min_theta, max_theta)
+
+    return corners
+
+corners = generate_corners()
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -99,39 +106,39 @@ while theta < 2*np.pi - 0.001:
 # weird rounding stuff. Thankfully checking set membership is O(1).
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-boundary_set = set()
 
-for i in range(len(corners)):
 
-    # x's different, do "y = mx + b" between corners
-    if corners[i][0] != corners[(i+1) % len(corners)][0]:
+def discrete_interpolate(p1: Tuple[int, int],
+                         p2: Tuple[int, int]) -> Set[Tuple[int, int]]:
+    l = set()
 
-        # Look at the points left-to-right
+    if p1[0] != p2[0]:
+
+        # Look at the points bottom-to-top
         if corners[i][0] < corners[(i+1) % len(corners)][0]:
             p1, p2 = corners[i], corners[(i+1) % len(corners)]
         else:
             p2, p1 = corners[i], corners[(i + 1) % len(corners)]
 
-        # x's different, so slope safe
-        m1 = (p2[1] - p1[1])/(p2[0] - p1[0])
+        # y's different, so slope safe
+        m1 = (p2[1] - p1[1]) / (p2[0] - p1[0])
         b1 = p2[1] - m1 * p2[0]
 
-        # Increment x one at a time and plot y
         x = p1[0]
         while x < p2[0]:
             y = m1*x + b1
-            if (int(x), int(y)) not in boundary_set:
-                boundary_set.add((int(x), int(y)))
+            if (int(x), int(y)) not in l:
+                l.add((int(x), int(y)))
             x += 1
 
     # y's different, do "x = my + b" between corners for good measure
-    if corners[i][1] != corners[(i+1) % len(corners)][1]:
+    if p1[1] != p2[1]:
 
         # Look at the points bottom-to-top
-        if corners[i][1] < corners[(i+1) % len(corners)][1]:
-            p1, p2 = corners[i], corners[(i+1) % len(corners)]
+        if p1[1] < p2[1]:
+            p1, p2 = p1, p2
         else:
-            p2, p1 = corners[i], corners[(i + 1) % len(corners)]
+            p2, p1 = p1, p2
 
         # y's different, so slope safe
         m2 = (p2[0] - p1[0]) / (p2[1] - p1[1])
@@ -140,9 +147,19 @@ for i in range(len(corners)):
         y = p1[1]
         while y < p2[1]:
             x = m2*y + b2
-            if (int(x), int(y)) not in boundary_set:
-                boundary_set.add((int(x), int(y)))
+            if (int(x), int(y)) not in l:
+                l.add((int(x), int(y)))
             y += 1
+
+    return l
+
+
+boundary_set = set()
+for i in range(len(corners)):
+    yeah = discrete_interpolate(corners[i], corners[(i+1) % len(corners)])
+    boundary_set.update(yeah)
+    # corners[i][0] != corners[(i + 1) % len(corners)][0]:
+    # x's different, do "y = mx + b" between corners
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
