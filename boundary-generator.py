@@ -244,7 +244,6 @@ for bp in boundary_idx:
     g_vec[boundary_idx[bp]] = g(bp)
 
 
-
 # (3) A' matrix. Use CSR format because it's pretty big.
 # TODO
 
@@ -293,10 +292,11 @@ bv_min = np.min(g_vec)
 bv_max = np.max(g_vec)
 normalized_boundary_values = np.zeros_like(g_vec)
 for i in range(len(g_vec)):
-    normalized_boundary_values[i] = 255*(g_vec[i] - bv_min)/(bv_max - bv_min) if bv_max != bv_min else 0
-
     # In case we just want the un-normalized values
     # normalized_boundary_values[i] = g_vec[i]
+
+    normalized_boundary_values[i] = 255*(g_vec[i] - bv_min)/(bv_max - bv_min) if bv_max != bv_min else 0
+
 
 # Make a "layer" for each RGB color.
 # We can be creative or whatever to make it look nice, e.g. green ==> good, red ==> bad
