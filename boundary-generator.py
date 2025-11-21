@@ -1,4 +1,5 @@
 from typing import List, Tuple
+from scipy.sparse import csr_matrix
 from PIL import Image
 import numpy as np
 import noise
@@ -7,21 +8,23 @@ import time
 import json
 
 
-n = 512
+n = 2 ** 8
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (0) Boundary function                                   #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
-# aka: g(x). A map R^2 --> [-1, 1]
+# A map R^2 --> [-1, 1]
 #
 # Do inquire if curious. I have spent long hours delving deeply into the dark arts
 # of "perlin noise." It's just smooth noise, and the boundary samples from it.
 # Hence, a smoothly random boundary function. Should be interesting for testing?
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-def boundary_function(p):
-    #
+
+
+def g(p: Tuple[int, int]) -> float:
+
     scale = 2
     z = 8.88  # seed z for reproducibility?
     # below, adding 0.08 so that it's NEVER an integer: integer coords always return zero
@@ -82,7 +85,9 @@ while theta < 2*np.pi - 0.001:
 # works sorts this out. By having "if" statements
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# boundary_idx = {}
 boundary_points = []
+
 for i in range(len(corners)):
 
     if corners[i][0] != corners[(i+1) % len(corners)][0]:  # x's different, do line
@@ -102,6 +107,7 @@ for i in range(len(corners)):
         while x < p2[0]:
             y = m1*x + b1
             boundary_points.append((int(x), int(y)))
+            # boundary_idx[(int(x), int(y))] = len(boundary_idx) - 1
             x += 1
 
     if corners[i][1] != corners[(i+1) % len(corners)][1]:  # y's different, do line
@@ -120,6 +126,7 @@ for i in range(len(corners)):
         while y < p2[1]:
             x = m2*y + b2
             boundary_points.append((int(x), int(y)))
+            # boundary_idx[(int(x), int(y))] = len(boundary_idx) - 1
             y += 1
 
 
@@ -140,7 +147,7 @@ for i in range(len(corners)):
 # (3) Then we put its four grid neighbors in queue to be checked; return to (2)
 #
 # Hence, "plague strategy;" each point gets "infected." Thank heavens our boundary
-# is closed! It quarantines the exterior and we end up with all the interior points.
+# is closed! It quarantines the exterior, and we end up with all the interior points.
 #
 # FDM doesn't care what ordering we choose for the interior and boundary points.
 #
@@ -148,17 +155,17 @@ for i in range(len(corners)):
 
 # This is the function inside the boundary, like f on the LHS of the system in FDM
 # For now, for us, it can just return zero.
-def f(p):
+def f(p: Tuple[int, int]) -> float:
     # This can help us visualize the boundary function:
-    # return boundary_function(p)
-
+    return g(p)
     # ... and this will surely make a fun picture, too:
-    return np.sin(0.08 * (p[0] * p[1]) / n)
+    #return np.sin(0.08 * (p[0] * p[1]) / n)
+
 
 def get_neighbors(p: Tuple[int, int]) -> List[Tuple[int, int]]:
     """
     Gets the grid neighbors of p in standard coordinates (origin is 0).
-    Totally not index-safe! Please don't use this diretly on an array...
+    Totally not index-safe! Please don't use this directly on an array...
     :param p: Grid point in standard coordinates
     :return: Grid neighbors of p
     """
@@ -167,10 +174,13 @@ def get_neighbors(p: Tuple[int, int]) -> List[Tuple[int, int]]:
 
 t0 = time.perf_counter()  # let's see how long this takes in practice... algo is O(n^2) probably
 
-# Here's the duplicates-removed boundary set, equipped with boundary values:
+# Here's the duplicates-removed boundary set, equipped with an ordering.
 # Python `dict` data type gives O(1) lookup for membership
-boundary_map = {bp: boundary_function(bp) for bp in boundary_points}
-interior_map = {}
+boundary_idx = {}
+for bp in boundary_points:
+    boundary_idx[bp] = len(boundary_idx) - 1
+
+interior_idx = {}
 q = queue.Queue()
 q.put((0, 0))  # Infect the origin
 
@@ -178,8 +188,13 @@ q.put((0, 0))  # Infect the origin
 # Huge fan of constant time dict lookup
 while not q.empty():
     p = q.get()
-    if p not in boundary_map and p not in interior_map:
-        interior_map[p] = f(p)
+    if p not in boundary_idx and p not in interior_idx:
+
+        # Setting the dict entry to the size of the set at the time gives
+        # us an ordering on the interior. Now we can map each point to
+        # its index in a vector. Will come in clutch when we vectorize D
+        interior_idx[p] = len(interior_idx) - 1
+
         for neighbor in get_neighbors(p):
             q.put(neighbor)
 
@@ -189,38 +204,54 @@ dt = tf - t0
 print('****************************************************************')
 print('\tBOUNDARY GENERATION COMPLETE. INTERIOR GENERATION COMPLETE.')
 print('****************************************************************')
-print('Number of interior points:', len(interior_map), f' --> {len(interior_map) / (n * n):.2%} of the {n}x{n} grid.')
-print('Number of boundary points:', len(boundary_map), f' --> {len(boundary_map) / (n * n):.2%} of the {n}x{n} grid.')
+print('Number of interior points:', len(interior_idx), f' --> {len(interior_idx) / (n * n):.2%} of the {n}x{n} grid.')
+print('Number of boundary points:', len(boundary_idx), f' --> {len(boundary_idx) / (n * n):.2%} of the {n}x{n} grid.')
 print('Time to compute interior:', f'~{dt:.4f}s')
-print(f'~{(len(interior_map) / dt):.2f} points per second.')
+print(f'~{(len(interior_idx) / dt):.2f} points per second.')
 
 
 # Finally, let's vectorize the boundary and interior:
-# Making it a np.array here in case we want to use that,
-# converting back to a list to json serialize
-boundary_vec = np.array(list(boundary_map.values()))
-interior_vec = np.array(list(interior_map.values()))
-closure_vec = np.concatenate([interior_vec, boundary_vec])  # boundary, then interior--as the book stipulated
+# We need all the components of "Au = A'g + f"
+# TODO
+
+# (1) f vector - interior values
+f_vec = np.zeros(len(interior_idx))
+
+for ip in interior_idx:
+    f_vec[interior_idx[ip]] = f(ip)
+
+# (2) g vector - boundary values
+g_vec = np.zeros(len(boundary_idx))
+
+for bp in boundary_idx:
+    g_vec[boundary_idx[bp]] = g(bp)
+
+
+# (3) A' matrix. Use CSR format because it's pretty big.
+
+
+# (4) The mighty A matrix. Use CSR format because it's HUGE.
+
 
 # Bam.
 
 # Shall we go so far as to output a json file?
-data = {
-    'boundary_vec': list(boundary_vec),
-    'interior_vec': list(interior_vec),
-    'closure_vec': list(closure_vec)
-}
-filename = 'output/boundary0.json'
-try:
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=4)
-        print('****************************************************************')
-        print(f'JSON DATA SUCCESSFULLY SAVED TO: {filename}.')
-        print('****************************************************************')
-except IOError as e:
-    print('****************************************************************')
-    print('ERROR WRITING JSON DATA TO: {filename}')
-    print('****************************************************************')
+# data = {
+#     'boundary_vec': list(boundary_vec),
+#     'interior_vec': list(interior_vec),
+#     'closure_vec': list(closure_vec)
+# }
+# filename = 'output/boundary0.json'
+# try:
+#     with open(filename, 'w') as f:
+#         json.dump(data, f, indent=4)
+#         print('****************************************************************')
+#         print(f'JSON DATA SUCCESSFULLY SAVED TO: {filename}.')
+#         print('****************************************************************')
+# except IOError as e:
+#     print('****************************************************************')
+#     print('ERROR WRITING JSON DATA TO: {filename}')
+#     print('****************************************************************')
 
 # Double bam.
 
@@ -235,52 +266,47 @@ red_window = np.zeros((n, n))
 green_window = np.zeros((n, n))
 blue_window = np.zeros((n, n))
 
-# rgb normalize the boundary values:
-boundary_values = np.array([bv for bv in boundary_map.values()])
-bv_min = np.min(boundary_values)
-bv_max = np.max(boundary_values)
 
 # We need to make a map [-1, 1] --> [0, 255].
 # For enhanced visualization, we first min-max normalize the boundary values,
 # linearly squeezing them into to fit perfectly into [0, 1] (min +-> 0, max +-> 1)
 # Then a simple multiplication by 255 puts them into the 8-bit unsigned int range for RGB
-normalized_boundary_map = {}
-for bp, bv in boundary_map.items():
-    normalized_bv = 255*(bv - bv_min)/(bv_max - bv_min) if bv_max != bv_min else 0
-    normalized_boundary_map[bp] = normalized_bv
+bv_min = np.min(g_vec)
+bv_max = np.max(g_vec)
+normalized_boundary_values = np.zeros_like(g_vec)
+for i in range(len(g_vec)):
+    normalized_boundary_values[i] = 255*(g_vec[i] - bv_min)/(bv_max - bv_min) if bv_max != bv_min else 0
 
 # Make a "layer" for each RGB color.
 # We can be creative or whatever to make it look nice, e.g. green ==> good, red ==> bad
-for bp, bv in normalized_boundary_map.items():
+for bp, idx in boundary_idx.items():
     c = int(bp[0] + n / 2)
     r = int(bp[1] + n / 2)
-    red_window[r][c] = 255 - bv
-    green_window[r][c] = bv
+    red_window[r][c] = 255 - normalized_boundary_values[idx]
+    green_window[r][c] = normalized_boundary_values[idx]
     blue_window[r][c] = 0
 
 
 # Now do the same for the interior.
 # It's going to be a real nice addition to the scrapbook.
-interior_values = np.array([iv for iv in interior_map.values()])
-iv_min = np.min(interior_values)
-iv_max = np.max(interior_values)
+iv_min = np.min(f_vec)
+iv_max = np.max(f_vec)
 
-normalized_interior_map = {}
-for ip, iv in interior_map.items():
-    normalized_iv = 128*(iv - iv_min)/(iv_max - iv_min) if iv_max != iv_min else 0
-    normalized_interior_map[ip] = normalized_iv
+normalized_interior_values = np.zeros_like(f_vec)
+for i in range(len(f_vec)):
+    normalized_interior_values[i] = 128*(f_vec[i] - iv_min)/(iv_max - iv_min) if iv_max != iv_min else 0
 
-for ip, iv in normalized_interior_map.items():
+for ip, idx in interior_idx.items():
     c = int(ip[0] + n / 2)
     r = int(ip[1] + n / 2)
     red_window[r][c] = 0
     green_window[r][c] = 0
-    blue_window[r][c] = iv
+    blue_window[r][c] = normalized_interior_values[idx]
 
 window_stack = np.stack((red_window, green_window, blue_window), axis=2)
 img = Image.fromarray(window_stack.astype('uint8'))
 img.save('imgs/boundary0.png')
-# img.show()
+img.show()
 
 
 # ********************************
@@ -292,9 +318,9 @@ img.save('imgs/boundary0.png')
 #     for j in range(grid.shape[1]):
 #         if i == j == n:
 #             row += '[O]'
-#         elif (int(i - n / 2), int(j - n / 2)) in boundary_map:
+#         elif (int(i - n / 2), int(j - n / 2)) in boundary_idx:
 #             row += '[@]'
-#         elif (int(i - n / 2), int(j - n / 2)) in interior_map:
+#         elif (int(i - n / 2), int(j - n / 2)) in interior_idx:
 #             row += '###'
 #         else:
 #             row += ' + '
