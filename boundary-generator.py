@@ -8,7 +8,7 @@ import time
 import json
 
 
-n = 8
+n = 501
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (0) Boundary function                                   #
@@ -107,12 +107,10 @@ corners = generate_corners()
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+boundary_set = set()
 
-def discrete_interpolate(p1: Tuple[int, int],
-                         p2: Tuple[int, int]) -> Set[Tuple[int, int]]:
-    l = set()
-
-    if p1[0] != p2[0]:
+for i in range(len(corners)):
+    if corners[i][0] != corners[(i+1) % len(corners)][0]:
 
         # Look at the points bottom-to-top
         if corners[i][0] < corners[(i+1) % len(corners)][0]:
@@ -127,18 +125,18 @@ def discrete_interpolate(p1: Tuple[int, int],
         x = p1[0]
         while x < p2[0]:
             y = m1*x + b1
-            if (int(x), int(y)) not in l:
-                l.add((int(x), int(y)))
+            if (int(x), int(y)) not in boundary_set:
+                boundary_set.add((int(x), int(y)))
             x += 1
 
     # y's different, do "x = my + b" between corners for good measure
-    if p1[1] != p2[1]:
+    if corners[i][1] != corners[(i+1) % len(corners)][1]:
 
         # Look at the points bottom-to-top
-        if p1[1] < p2[1]:
-            p1, p2 = p1, p2
+        if corners[i][1] < corners[(i+1) % len(corners)][1]:
+            p1, p2 = corners[i], corners[(i+1) % len(corners)]
         else:
-            p2, p1 = p1, p2
+            p2, p1 = corners[i], corners[(i+1) % len(corners)]
 
         # y's different, so slope safe
         m2 = (p2[0] - p1[0]) / (p2[1] - p1[1])
@@ -147,19 +145,9 @@ def discrete_interpolate(p1: Tuple[int, int],
         y = p1[1]
         while y < p2[1]:
             x = m2*y + b2
-            if (int(x), int(y)) not in l:
-                l.add((int(x), int(y)))
+            if (int(x), int(y)) not in boundary_set:
+                boundary_set.add((int(x), int(y)))
             y += 1
-
-    return l
-
-
-boundary_set = set()
-for i in range(len(corners)):
-    yeah = discrete_interpolate(corners[i], corners[(i+1) % len(corners)])
-    boundary_set.update(yeah)
-    # corners[i][0] != corners[(i + 1) % len(corners)][0]:
-    # x's different, do "y = mx + b" between corners
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -330,13 +318,16 @@ Ahat = coo_matrix(([1] * len(Ahat_rows), (Ahat_rows, Ahat_cols)), shape=(len(int
 # Ahat = Ahat.tocsr()
 
 
-# Now, et's get creative:
+# Now, let's get creative:
 # ********************************
 #   DISPLAY AS PIXEL MAP:
 # ********************************
-
-# Converts array index to Z^2 point
 def grid(i: int) -> int:
+    """
+    # Converts array index to point on the integer line based on N
+    :param i: array index
+    :return: yeah..
+    """
     return int(i - n/2 + 0.5)
 
 
@@ -396,20 +387,18 @@ def make_img(show_bv=True, show_iv=True):
     return Image.fromarray(window_stack.astype('uint8'))
 
 
-# img = make_img()
-# img.save('imgs/boundary0.png')
-# img.show()
-
-
 # ********************************
 #   DISPLAY IN TERMINAL:
 # ********************************
-# NOTE: this gets slightly messed up when n >= 200 because "100" is three digits
-# and this function displays the grid values from [-(n/2), (n/2) - 1]
-
-# The rows will print backwards so origin is bottom left
-
 def to_string():
+    """
+    NOTE: this gets slightly messed up when n >= 200 because "100" is three digits
+    and this function displays the grid values from [-(n/2), (n/2) - 1]
+
+    The rows will print backwards so origin is bottom left
+
+    :return: string representation of the boundary
+    """
     s = ''
 
     for y in range(n - 1, 0, -1):
@@ -457,7 +446,11 @@ def to_string():
 
     return s
 
-print(to_string())
+
+img = make_img()
+img.save('imgs/boundary0.png')
+img.show()
+# print(to_string())
 
 
 
