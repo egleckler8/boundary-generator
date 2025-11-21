@@ -8,7 +8,7 @@ import time
 import json
 
 
-n = 2 ** 8
+n = 40
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (0) Boundary function                                   #
@@ -25,6 +25,7 @@ n = 2 ** 8
 
 def g(p: Tuple[int, int]) -> float:
 
+    return 1.5 / (p[0] - n)
     scale = 2
     z = 8.88  # seed z for reproducibility?
     # below, adding 0.08 so that it's NEVER an integer: integer coords always return zero
@@ -157,9 +158,11 @@ for i in range(len(corners)):
 # For now, for us, it can just return zero.
 def f(p: Tuple[int, int]) -> float:
     # This can help us visualize the boundary function:
-    return g(p)
+    # return g(p)
+    # This can help us check the orientation:
+    return p[0]
     # ... and this will surely make a fun picture, too:
-    #return np.sin(0.08 * (p[0] * p[1]) / n)
+    # return np.sin(0.08 * (p[0] * p[1]) / n)
 
 
 def get_neighbors(p: Tuple[int, int]) -> List[Tuple[int, int]]:
@@ -209,29 +212,30 @@ print('Number of boundary points:', len(boundary_idx), f' --> {len(boundary_idx)
 print('Time to compute interior:', f'~{dt:.4f}s')
 print(f'~{(len(interior_idx) / dt):.2f} points per second.')
 
-
-# Finally, let's vectorize the boundary and interior:
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#                       (3) Vectorize interior & boundary                       #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#
 # We need all the components of "Au = A'g + f"
-# TODO
+#
 
 # (1) f vector - interior values
 f_vec = np.zeros(len(interior_idx))
-
 for ip in interior_idx:
     f_vec[interior_idx[ip]] = f(ip)
 
 # (2) g vector - boundary values
 g_vec = np.zeros(len(boundary_idx))
-
 for bp in boundary_idx:
     g_vec[boundary_idx[bp]] = g(bp)
 
 
-# (3) A' matrix. Use CSR format because it's pretty big.
 
+# (3) A' matrix. Use CSR format because it's pretty big.
+# TODO
 
 # (4) The mighty A matrix. Use CSR format because it's HUGE.
-
+# TODO
 
 # Bam.
 
@@ -280,8 +284,9 @@ for i in range(len(g_vec)):
 # Make a "layer" for each RGB color.
 # We can be creative or whatever to make it look nice, e.g. green ==> good, red ==> bad
 for bp, idx in boundary_idx.items():
-    c = int(bp[0] + n / 2)
-    r = int(bp[1] + n / 2)
+    c = int(bp[0] + n / 2)              # x-axis goes left --> right
+    r = (n - 1) - int(bp[1] + n / 2)    # y-axis goes bottom --> top
+    #r, c = plane_to_array(bp)
     red_window[r][c] = 255 - normalized_boundary_values[idx]
     green_window[r][c] = normalized_boundary_values[idx]
     blue_window[r][c] = 0
@@ -297,8 +302,8 @@ for i in range(len(f_vec)):
     normalized_interior_values[i] = 128*(f_vec[i] - iv_min)/(iv_max - iv_min) if iv_max != iv_min else 0
 
 for ip, idx in interior_idx.items():
-    c = int(ip[0] + n / 2)
-    r = int(ip[1] + n / 2)
+    c = int(ip[0] + n / 2)              # x-axis goes left --> right
+    r = (n - 1) - int(ip[1] + n / 2)    # y-axis goes bottom --> top
     red_window[r][c] = 0
     green_window[r][c] = 0
     blue_window[r][c] = normalized_interior_values[idx]
@@ -312,20 +317,36 @@ img.show()
 # ********************************
 #   DISPLAY IN TERMINAL:
 # ********************************
-# grid = np.zeros((n, n))
-# for i in range(grid.shape[0]):
-#     row = ''
-#     for j in range(grid.shape[1]):
-#         if i == j == n:
-#             row += '[O]'
-#         elif (int(i - n / 2), int(j - n / 2)) in boundary_idx:
-#             row += '[@]'
-#         elif (int(i - n / 2), int(j - n / 2)) in interior_idx:
-#             row += '###'
-#         else:
-#             row += ' + '
-#
-#     print(row)
+grid = np.zeros((n, n))
+
+row0 = '0\t'
+for x in range(n):
+    row0 += f' {x + 1} '[:3]
+rows = [row0]
+
+for y in range(n):
+    row = f'{y + 1}\t'
+    for x in range(n):
+        if x == y == n:
+            row += '[O]'
+        elif (int(x - n / 2), int(y - n / 2)) in boundary_idx:
+            # row += '[@]'
+            row += f'{str(round(normalized_boundary_values[boundary_idx[int(x - n / 2), int(y - n / 2)]]))} '[:3]
+            # while len(s) < 3:
+            #     s = '0' + s
+            # row += s
+        elif (int(x - n / 2), int(y - n / 2)) in interior_idx:
+            row += '###'
+        else:
+            row += ' + '
+            # row += f'({x},{y})'
+
+    rows.append(row)
+
+
+# Print so origin is bottom left, as we'd expect
+for i in range(n):
+    print(rows[n - 1 - i])
 
 
 
