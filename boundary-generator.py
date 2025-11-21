@@ -23,9 +23,16 @@ n = 40
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-def g(p: Tuple[int, int]) -> float:
+def g(p: Tuple[float, float]) -> float:
+    """
+    Boundary function, R^2 --> R.
+    :param p: plane point in standard (x, y) coords
+    :return: g(p)
+    """
+    # This can help us check that everything is in order
+    # return p[0]
 
-    return p[0]
+    # The following will sample from smooth noise:
     scale = 2
     z = 8.88  # seed z for reproducibility?
     # below, adding 0.08 so that it's NEVER an integer: integer coords always return zero
@@ -165,9 +172,9 @@ for i in range(len(corners)):
 # For now, for us, it can just return zero.
 def f(p: Tuple[int, int]) -> float:
     # This can help us visualize the boundary function:
-    # return g(p)
+    return g(p)
     # This can help us check the orientation:
-    return p[0]
+    # return p[0]
     # ... and this will surely make a fun picture, too:
     # return np.sin(0.08 * (p[0] * p[1]) / n)
 
@@ -313,14 +320,14 @@ for i in range(len(f_vec)):
 for ip, idx in interior_idx.items():
     c = int(ip[0] + n / 2)              # x-axis goes left --> right
     r = (n - 1) - int(ip[1] + n / 2)    # y-axis goes bottom --> top
-    red_window[r][c] = 0
-    green_window[r][c] = 0
+    red_window[r][c] = 16
+    green_window[r][c] = 16
     blue_window[r][c] = normalized_interior_values[idx]
 
 window_stack = np.stack((red_window, green_window, blue_window), axis=2)
 img = Image.fromarray(window_stack.astype('uint8'))
 img.save('imgs/boundary0.png')
-# img.show()
+img.show()
 
 
 # ********************************
@@ -330,6 +337,9 @@ img.save('imgs/boundary0.png')
 # and this function displays the grid values from [-(n/2), (n/2) - 1]
 
 # The rows will print backwards so origin is bottom left
+
+s = ''
+
 for y in range(n - 1, 0, -1):
 
     # Start out the row with the y-value
@@ -364,13 +374,15 @@ for y in range(n - 1, 0, -1):
             row += ' + '
             # row += f'({x},{y})'
 
-    print(row)
+    s += row + '\n'
 
 # The bottom row will be x-values
 row0 = '0\t'
 for x in range(n):
     row0 += f'{int(x  - n/2) }   '[:3]
-print(row0)
+s += row0 + '\n'
+
+# print(s)
 
 
 
