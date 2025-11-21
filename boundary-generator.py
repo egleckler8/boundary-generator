@@ -8,7 +8,7 @@ import time
 import json
 
 
-n = 40
+n = 8
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (0) Boundary function                                   #
@@ -121,7 +121,7 @@ for i in range(len(corners)):
         while x < p2[0]:
             y = m1*x + b1
             if (int(x), int(y)) not in boundary_idx:
-                boundary_idx[(int(x), int(y))] = len(boundary_idx) - 1
+                boundary_idx[(int(x), int(y))] = len(boundary_idx)
             x += 1
 
     # y's different, do "x = my + b" between corners for good measure
@@ -141,7 +141,7 @@ for i in range(len(corners)):
         while y < p2[1]:
             x = m2*y + b2
             if (int(x), int(y)) not in boundary_idx:
-                boundary_idx[(int(x), int(y))] = len(boundary_idx) - 1
+                boundary_idx[(int(x), int(y))] = len(boundary_idx)
             y += 1
 
 
@@ -191,12 +191,6 @@ def get_neighbors(p: Tuple[int, int]) -> List[Tuple[int, int]]:
 
 t0 = time.perf_counter()  # let's see how long this takes in practice... algo is O(n^2) probably
 
-# Here's the duplicates-removed boundary set, equipped with an ordering.
-# Python `dict` data type gives O(1) lookup for membership
-# boundary_idx = {}
-# for bp in boundary_points:
-#     boundary_idx[bp] = len(boundary_idx) - 1
-
 interior_idx = {}
 q = queue.Queue()
 q.put((0, 0))  # Infect the origin
@@ -210,7 +204,7 @@ while not q.empty():
         # Setting the dict entry to the size of the set at the time gives
         # us an ordering on the interior. Now we can map each point to
         # its index in a vector. Will come in clutch when we vectorize D
-        interior_idx[p] = len(interior_idx) - 1
+        interior_idx[p] = len(interior_idx)
 
         for neighbor in get_neighbors(p):
             q.put(neighbor)
@@ -225,6 +219,7 @@ print('Number of interior points:', len(interior_idx), f' --> {len(interior_idx)
 print('Number of boundary points:', len(boundary_idx), f' --> {len(boundary_idx) / (n * n):.2%} of the {n}x{n} grid.')
 print('Time to compute interior:', f'~{dt:.4f}s')
 print(f'~{(len(interior_idx) / dt):.2f} points per second.')
+print('****************************************************************')
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (3) Vectorize interior & boundary                       #
@@ -248,8 +243,53 @@ for bp in boundary_idx:
 # TODO
 
 # (4) The mighty A matrix. Use CSR format because it's HUGE.
-# TODO
-# Assemble COO matrix with (row, col, val)
+
+# We shall first assemble COO matrix with (row, col, val),
+# then turn that into a CSR matrix to efficiently store sparse data
+
+# Walkers with transition probabilities enumerated
+# as [n, s, e, w] to match `get_neighbors` function
+w_symmetric = [0.25, 0.25, 0.25, 0.25]
+w1 = [0.125, 0.125, 0.325, 0.325]
+w2 = [0.225, 0.325, 0.125, 0.125]
+
+# This is the walker we choose just for testing:
+walker = w1
+
+messages = []
+
+rows = []
+cols = []
+vals = []
+for ip, idx in interior_idx.items():
+
+    # Each row will correspond to an interior point,
+    # and it will have at most five entries.
+    # Note: we will have to convert Z^2 points to grid indices
+
+    # One is for point itself, and it should be -1
+    rows.append(idx)
+    cols.append(idx)
+    vals.append(-1)
+
+    # There will be at most four more, one for each neighbor
+    neighbors = get_neighbors(ip)
+    for i, neighbor in enumerate(neighbors):
+        if neighbor not in boundary_idx:
+            # neighbors and walkers both ordered by [n, s, e, w]!!
+            rows.append(idx)
+            cols.append(interior_idx[neighbor])
+            vals.append(walker[i])
+
+# Make the COO matrix
+# print(f'should be dimension {len(interior_idx)}x{len(interior_idx)}')
+# print('rows', len(rows), rows)
+# print('cols', len(cols), cols)
+# print(len(vals))
+A = coo_matrix((vals, (rows, cols)), shape=(len(interior_idx), len(interior_idx)))
+print(A)
+
+
 # Convert to csr
 
 # Bam.
@@ -364,7 +404,7 @@ def to_string():
                 row += '[O]'
 
             # Marking boundary
-            elif (int(x - n / 2), int(y - n / 2)) in boundary_idx:
+            elif (int(x - n / 2), int(y - n/2)) in boundary_idx:
                 # Below is a good way to visualize the boundary values in the grid, but it's broken
                 # as of the creation of "get_image," which hides the scope of `normalized_boundary_values`
                 # bv_for_display = str(int(normalized_boundary_values[boundary_idx[int(x - n/2), int(y - n/2)]]))
@@ -372,11 +412,9 @@ def to_string():
 
                 row += '[@]'
 
-
-
             # Marking interior
-            elif (int(x - n / 2), int(y - n / 2)) in interior_idx:
-                row += '###'
+            elif (int(x - n / 2), int(y - n/2)) in interior_idx:
+                row += ' # '
 
             # If the grid is big enough, maybe some vertical axes will look nice?
             # Or not... it does kind of clutter things up.
@@ -401,7 +439,7 @@ def to_string():
 
     return s
 
-# print(to_string())
+print(to_string())
 
 
 
