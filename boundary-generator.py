@@ -403,8 +403,8 @@ def to_string():
     """
     s = ''
 
-    for y in range(n - 1, 0, -1):
-        yz = grid(y)
+    for y in range(n):
+        yz = grid((n-1) - y)
 
         # Start out the row with the y-value
         row = str(yz) + '\t'
@@ -440,9 +440,8 @@ def to_string():
         s += row + '\n'
 
     # The bottom row will be x-values
-    row0 = str(grid(0)) + '\t'
+    row0 = '\t'
     for x in range(n):
-        # row0 += str(grid(x+1)).center(3)
         row0 += str(grid(x)).center(3)
     s += row0 + '\n'
 
