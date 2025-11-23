@@ -30,7 +30,7 @@ def g(p: Tuple[float, float]) -> float:
     :return: g(p)
     """
     # This can help us check that everything is in order
-    return p[0]
+    # return p[0]
 
     # The following will sample from smooth noise:
     scale = 2
@@ -228,7 +228,11 @@ while not q.empty():
     # Here we are constructing a minimal boundary, including on the
     # points that the interior points are touching.
     else:
-        boundary_idx[p] = len(boundary_idx)
+        # PLEASE!! do not try to double-add. this will TOTALLY screw up `boundary_idx`
+        # because if a duplicate is considered here, it will update, but it won't change
+        # the length, and the next unique point added will then have the same index. Bad!!
+        if p not in boundary_idx:
+            boundary_idx[p] = len(boundary_idx)
 
 
 tf = time.perf_counter()
@@ -307,8 +311,8 @@ for ip, idx in interior_idx.items():
             A_cols.append(interior_idx[neighbor])
             A_vals.append(walker[i])
 
-
-Ahat_vals = [1] * len(Ahat_rows)
+# Every entry in Ahat is -1
+Ahat_vals = [-1] * len(Ahat_rows)
 
 # COOrdinate matrices from scipy.sparse allow us to efficiently construct
 # sparse matrices. They're not very good data structures for doing linalg,
@@ -328,9 +332,9 @@ def grid(i: int) -> int:
     """
     # Converts array index to point on the integer line based on N
     :param i: array index
-    :return: yeah..
+    :return: yeah...
     """
-    return int(i - n/2 + 0.5)
+    return int(i - (n-1)/2)
 
 
 def make_img(show_bv=True, show_iv=True):
@@ -351,6 +355,7 @@ def make_img(show_bv=True, show_iv=True):
     # Then a simple multiplication by 255 puts them into the 8-bit unsigned int range for RGB
     bv_min = np.min(g_vec)
     bv_max = np.max(g_vec)
+    print('bv_min:', bv_min, 'bv_max:', bv_max)
     normalized_boundary_values = np.zeros_like(g_vec)
     for i in range(len(g_vec)):
         # In case we just want the un-normalized values
@@ -362,8 +367,8 @@ def make_img(show_bv=True, show_iv=True):
     # Make a "layer" for each RGB color.
     # We can be creative or whatever to make it look nice, e.g. green ==> good, red ==> bad
     for bp, idx in boundary_idx.items():
-        c = int(bp[0] + (n-1)/2)              # x-axis goes left --> right
-        r = (n - 1) - int(bp[1] + (n-1)/2)    # y-axis goes bottom --> top
+        c = int(bp[0] + (n-1)/2)            # x-axis goes left --> right
+        r = (n-1) - int(bp[1] + (n-1)/2)    # y-axis goes bottom --> top
         red_window[r][c] = 255 - normalized_boundary_values[idx]
         green_window[r][c] = normalized_boundary_values[idx] if show_bv else 255
         blue_window[r][c] = 0 if show_bv else 255
@@ -379,16 +384,30 @@ def make_img(show_bv=True, show_iv=True):
         # else it will remain zero and hence be a black pixel
 
     for ip, idx in interior_idx.items():
-        c = int(ip[0] + (n-1)/2)              # x-axis goes left --> right
-        r = (n - 1) - int(ip[1] + (n-1)/2)    # y-axis goes bottom --> top
+        c = int(ip[0] + (n-1)/2)            # x-axis goes left --> right
+        r = (n-1) - int(ip[1] + (n-1)/2)    # y-axis goes bottom --> top
         red_window[r][c] = 16 if show_iv else 0
         green_window[r][c] = 16 if show_iv else 0
         blue_window[r][c] = normalized_interior_values[idx]
 
+    # Mark the origin & two points to clarify the axes' directions
+    o = int((n-1)/2)
+    red_window[o][o] = 255
+    green_window[o][o] = 255
+    blue_window[o][o] = 255
+
+    # red_window[o+3][o] = 0
+    # green_window[o+3][o] = 255
+    # blue_window[o+3][o] = 255
+    #
+    # red_window[o][o+3] = 255
+    # green_window[o][o+3] = 0
+    # blue_window[o][o+3] = 255
+
     window_stack = np.stack((red_window, green_window, blue_window), axis=2)
     return Image.fromarray(window_stack.astype('uint8'))
 
-corners = set(corners)
+
 # ********************************
 #   DISPLAY IN TERMINAL:
 # ********************************
@@ -415,6 +434,7 @@ def to_string():
             # Marking boundary
             if (xz, yz) in boundary_idx:
                 row += '[@]'
+                # row += f'[{str(round(g((xz, yz)), 2))}]'
 
             # Marking interior
             elif (xz, yz) in interior_idx:
