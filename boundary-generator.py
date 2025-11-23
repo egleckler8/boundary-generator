@@ -214,6 +214,12 @@ q.put((0, 0))
 
 while not q.empty():
     p = q.get()
+
+    # The boundary is strictly generated so that it will never touch the grid edges.
+    # Therefore, the interior will not, either. If this happens, something failed.
+    if int(p[0] - (n-1)/2) in {0, n} or int(p[1] - (n-1)/2)in {0, n}:
+        raise Exception('GENERATION FAILURE: BOUNDARY NOT CLOSED!')
+
     if p not in boundary_set:
         if p not in interior_idx:
 
