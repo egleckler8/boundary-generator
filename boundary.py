@@ -2,7 +2,6 @@ from typing import List, Tuple, Set, Callable
 from scipy.sparse import *
 from PIL import Image
 import numpy as np
-import noise
 import queue
 import time
 # import json # TODO: Export boundary as json?
@@ -224,10 +223,11 @@ class Boundary:
         print(STAR_BAR)
         print('BOUNDARY GENERATION COMPLETE'.center(len(STAR_BAR)))
         print(STAR_BAR)
+        print(f'Boundary centered at (0,0) in a {n}x{n} grid')
         print('Number of interior points:', self.interior_size,
-              f' --> {(self.interior_size / (n * n)):.2%} of the {n}x{n} grid.')
+              f'\t({(self.interior_size / (n * n)):.2%} of the grid)')
         print('Number of boundary points:', len(self.boundary_idx),
-              f' --> {(self.boundary_size / (n * n)):.2%} of the {n}x{n} grid.')
+              f'\t({(self.boundary_size / (n * n)):.2%} of the grid)')
         print('Time to compute interior:', f'~{dt:.4f}s')
         print(f'~{(self.interior_size / dt):.2f} points per second.')
         print(STAR_BAR)
@@ -258,22 +258,21 @@ class Boundary:
                                 walker: Tuple[float, float, float, float],
                                 interior_function: Callable[[Tuple[float, float]], float],
                                 boundary_function: Callable[[Tuple[float, float]], float],
-                                ):
+                                ) -> Tuple[csr_matrix, csr_matrix, np.array, np.array]:
         """
-        Create the components of "Au = -A_hat*g + f" to run finite difference method
-        with this boundary. Users should reference "Numerical Methods for Elliptic and
-        Parabolic Partial Differential Equations" by Knabner & Angerman to understand
-        FDM. The notation used here comes from Chapter 1, section 2, pg. 24-25.
+        Create the components of "Au = -A_hat*g + f" to run finite difference method with
+        this boundary. Users could reference the second edition of "Numerical Methods for
+        Elliptic and Parabolic Partial Differential Equations" by Knabner & Angerman to
+        understand FDM. This code uses notation from Chapter 1, section 2, pg. 24-25
+        of that text.
 
         TODO: Make Walker class a parameter
 
-        :return: Dictionary of components of "Au = -A_hat*g + f":
-        {
-            'A': <CSR format A matrix>,
-            'A_hat': <CSR format A_hat matrix, marks grid points as boundary points>,
-            'f': <np.array f vector, evals of interior function over interior>,
-            'g': <np.array g vector, evals of boundary function over boundary>
-        }
+        :return: Tuple of components of "Au = -A_hat*g + f":
+        [0]    'A': <CSR format A matrix>,
+        [1]    'A_hat': <CSR format A_hat matrix, marks grid points as boundary points>,
+        [2]    'f': <np.array f vector, evals of interior function over interior>,
+        [3]   'g': <np.array g vector, evals of boundary function over boundary>
         """
         # Shabam:
         f_vec = self.vectorize_interior(interior_function)
@@ -320,7 +319,7 @@ class Boundary:
         A_hat = coo_matrix(([-1] * len(A_hat_rows), (A_hat_rows, A_hat_cols)),
                            shape=(self.interior_size, self.boundary_size))
 
-        return {'A': A.tocsr(), 'A_hat': A_hat.tocsr(), 'f': f_vec, 'g': g_vec}
+        return A.tocsr(), A_hat.tocsr(), f_vec, g_vec
 
     def make_img(self,
                  interior_function: Callable[[Tuple[float, float]], float] = lambda p: 0.0,

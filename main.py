@@ -49,7 +49,7 @@ w2 = (0.325, 0.325, 0.125, 0.125)
 
 b = Boundary(n)
 
-yeah = b.generate_fdm_components(walker=w1, interior_function=f, boundary_function=g)
+# A, A_hat, f, g = b.generate_fdm_components(walker=w1, interior_function=f, boundary_function=g)
 
 
 img = b.make_img(f, g)
