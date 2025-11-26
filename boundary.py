@@ -266,13 +266,17 @@ class Boundary:
         understand FDM. This code uses notation from Chapter 1, section 2, pg. 24-25
         of that text.
 
-        TODO: Make Walker class a parameter
+        TODO: Make Walker *class* a parameter!!
 
-        :return: Tuple of components of "Au = -A_hat*g + f":
-        [0]    'A': <CSR format A matrix>,
-        [1]    'A_hat': <CSR format A_hat matrix, marks grid points as boundary points>,
-        [2]    'f': <np.array f vector, evals of interior function over interior>,
-        [3]   'g': <np.array g vector, evals of boundary function over boundary>
+        Format of return tuple:
+
+        - [0]    'A': <CSR format A matrix>,
+        - [1]    'A_hat': <CSR format A_hat matrix, marks grid points as boundary points>,
+        - [2]    'f': <np.array f vector, evals of interior function over interior>,
+        - [3]   'g': <np.array g vector, evals of boundary function over boundary>
+
+
+        :return: Tuple of components of "Au = -A_hat*g + f". See formatting above.
         """
         # Shabam:
         f_vec = self.vectorize_interior(interior_function)
@@ -338,7 +342,6 @@ class Boundary:
         # First vectorize & rgb normalize
         f_vec = self.vectorize_interior(interior_function)
         g_vec = self.vectorize_boundary(boundary_function)
-
         normalized_ivs = rgb_normalize(f_vec)
         normalized_bvs = rgb_normalize(g_vec)
 

@@ -41,21 +41,22 @@ def f(p: Tuple[int, int]) -> float:
     return np.sin(p[0] * p[1] / n)
 
 
-# Walkers with transition probabilities enumerated
-# as [n, s, e, w] to match `get_neighbors` function
-w_symmetric = (0.25, 0.25, 0.25, 0.25)
-w1 = (0.125, 0.125, 0.325, 0.325)
-w2 = (0.325, 0.325, 0.125, 0.125)
+
 
 b = Boundary(n)
 
-# A, A_hat, f, g = b.generate_fdm_components(walker=w1, interior_function=f, boundary_function=g)
 
+# Test out FDM on the boundary
+w1 = (0.125, 0.125, 0.325, 0.325)   # N, S, E, W
+A, A_hat, f_vec, g_vec = b.generate_fdm_components(walker=w1, interior_function=f, boundary_function=g)
 
+# Test out image generation:
 img = b.make_img(f, g)
 # img.save('imgs/boundary0.png')
 img.show()
-print(b)
+
+# Test out the __str__ method:
+# print(b)
 
 
 
