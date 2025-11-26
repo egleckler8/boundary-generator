@@ -164,29 +164,24 @@ class Boundary:
         """
 
         self.n = n
+        self.interior_idx = {}
+        self.boundary_idx = {}
 
+        # NOTE: Corners are generated in the unit disc, so we must dilate them to fit the nxn grid
         boundary_set = set()
-
-        # NOTE: Corners are generated in the unit disc,
-        # so must transform them to expand to nxn grid size
         corners = generate_corners()
         corners = [(int(corner[0] * (n/2)), int(corner[1] * (n/2))) for corner in corners]
         for i in range(len(corners)):
             a, b = corners[i], corners[(i + 1) % len(corners)]
             boundary_set.update(discrete_interpolate(a, b))
 
-        # ************************************************************************
-
-        t0 = time.perf_counter()  # let's see how long this takes in practice... algo is O(n^2) probably
+        # Let's see how long this takes in practice... algo is O(n^2) probably
+        t0 = time.perf_counter()
 
         # Origin infects the whole interior. Boundary quarantines effectively.
-        # Keep on the relevant boundary points.
-        # Huge fan of constant time dict lookup.
-        self.interior_idx = {}
-        self.boundary_idx = {}
+        # Keep on the relevant boundary points. Huge fan of constant time dict lookup.
         q = queue.Queue()
         q.put((0, 0))
-
         while not q.empty():
             p = q.get()
 
@@ -226,7 +221,7 @@ class Boundary:
         print(f'Boundary centered at (0,0) in a {n}x{n} grid')
         print('Number of interior points:', self.interior_size,
               f'\t({(self.interior_size / (n * n)):.2%} of the grid)')
-        print('Number of boundary points:', len(self.boundary_idx),
+        print('Number of boundary points:', self.boundary_size,
               f'\t({(self.boundary_size / (n * n)):.2%} of the grid)')
         print('Time to compute interior:', f'~{dt:.4f}s')
         print(f'~{(self.interior_size / dt):.2f} points per second.')
