@@ -47,7 +47,7 @@ def f(p: Tuple[int, int]) -> float:
 # as [n, s, e, w] to match `get_neighbors` function
 w_symmetric = (0.25, 0.25, 0.25, 0.25)
 w1 = (0.125, 0.125, 0.325, 0.325)
-w2 = (0.225, 0.325, 0.125, 0.125)
+w2 = (0.325, 0.325, 0.125, 0.125)
 
 b = boundary.Boundary(n=n, interior_function=f, boundary_function=g)
 
