@@ -8,7 +8,7 @@ import time
 import json
 
 
-n = 39
+n = 100
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                       (0) Boundary function                                   #
@@ -63,6 +63,23 @@ def generate_corners(theta_0: float = 0,
                      min_theta: float = np.arctan2(2, n),
                      max_r = 0.5*n - 1,
                      min_r = 0.25*n) -> List[Tuple[int, int]]:
+    """
+    Generates corners of a boundary.
+    Start at theta_0 and pick a random radius. Mark a corner. Then turn
+    counterclockwise by a random theta and pick another random radius,
+    mark a point, etc. until theta_f.
+
+    At each step, the random angle of rotation and radius are chosen
+    from a uniform distribution.
+
+    :param theta_0: Starting angle
+    :param theta_f: Ending angle
+    :param max_theta: Biggest possible random
+    :param min_theta:
+    :param max_r:
+    :param min_r:
+    :return:
+    """
     theta = theta_0
     C = []
 
@@ -108,17 +125,31 @@ corners = generate_corners()
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-boundary_set = set()
 
-for i in range(len(corners)):
+def discrete_interpolate(a: Tuple[float, float],
+                         b: Tuple[float, float]) -> Set[Tuple[int, int]]:
+    """
+    Takes two points in the plane (R^2) and returns a line between them
+    embedded in the grid (Z^2). This line is not guaranteed to be "minimal"
+    in the sense that it uses the least amount of points to connect the two lines,
+    only that the line will be straight and there will be no gaps.
 
-    if corners[i][0] != corners[(i+1) % len(corners)][0]:
+    :param a: First plane point
+    :param b: Second plane point
+    :return: Set of the grid points between a and b (includes a and b)
+    """
+
+    # Store the points generated in a set so no dupes, quick lookup
+    line = set()
+
+    # x's different, do "y = mx + b" between points
+    if a[0] != b[0]:
 
         # Look at the points bottom-to-top
-        if corners[i][0] < corners[(i+1) % len(corners)][0]:
-            p1, p2 = corners[i], corners[(i+1) % len(corners)]
+        if a[0] < b[0]:
+            p1, p2 = a, b
         else:
-            p2, p1 = corners[i], corners[(i + 1) % len(corners)]
+            p2, p1 = a, b
 
         # y's different, so slope safe
         m1 = (p2[1] - p1[1]) / (p2[0] - p1[0])
@@ -127,18 +158,17 @@ for i in range(len(corners)):
         x = p1[0]
         while x < p2[0]:
             y = m1*x + b1
-            if (int(x), int(y)) not in boundary_set:
-                boundary_set.add((int(x), int(y)))
+            line.add((int(x), int(y)))
             x += 1
 
-    # y's different, do "x = my + b" between corners for good measure
-    if corners[i][1] != corners[(i+1) % len(corners)][1]:
+    # y's different, do "x = my + b" between points for good measure
+    if a[1] != b[1]:
 
         # Look at the points bottom-to-top
-        if corners[i][1] < corners[(i+1) % len(corners)][1]:
-            p1, p2 = corners[i], corners[(i+1) % len(corners)]
+        if a[1] < b[1]:
+            p1, p2 = a, b
         else:
-            p2, p1 = corners[i], corners[(i+1) % len(corners)]
+            p2, p1 = a, b
 
         # y's different, so slope safe
         m2 = (p2[0] - p1[0]) / (p2[1] - p1[1])
@@ -147,9 +177,16 @@ for i in range(len(corners)):
         y = p1[1]
         while y < p2[1]:
             x = m2*y + b2
-            if (int(x), int(y)) not in boundary_set:
-                boundary_set.add((int(x), int(y)))
+            line.add((int(x), int(y)))
             y += 1
+
+    return line
+
+
+boundary_set = set()
+for i in range(len(corners)):
+    a, b = corners[i], corners[(i+1) % len(corners)]
+    boundary_set.update(discrete_interpolate(a, b))
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -217,7 +254,7 @@ while not q.empty():
 
     # The boundary is strictly generated so that it will never touch the grid edges.
     # Therefore, the interior will not, either. If this happens, something failed.
-    if int(p[0] - (n-1)/2) in {0, n} or int(p[1] - (n-1)/2)in {0, n}:
+    if int(p[0] - (n-1)/2) in {0, n} or int(p[1] - (n-1)/2) in {0, n}:
         raise Exception('GENERATION FAILURE: BOUNDARY NOT CLOSED!')
 
     if p not in boundary_set:
@@ -361,7 +398,6 @@ def make_img(show_bv=True, show_iv=True):
     # Then a simple multiplication by 255 puts them into the 8-bit unsigned int range for RGB
     bv_min = np.min(g_vec)
     bv_max = np.max(g_vec)
-    print('bv_min:', bv_min, 'bv_max:', bv_max)
     normalized_boundary_values = np.zeros_like(g_vec)
     for i in range(len(g_vec)):
         # In case we just want the un-normalized values
@@ -475,9 +511,9 @@ def to_string():
 
 
 img = make_img()
-img.save('imgs/boundary0.png')
+# img.save('imgs/boundary0.png')
 img.show()
-print(to_string())
+# print(to_string())
 
 
 
