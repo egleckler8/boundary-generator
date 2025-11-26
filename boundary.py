@@ -5,7 +5,7 @@ import numpy as np
 import noise
 import queue
 import time
-import json
+# import json # TODO: Export boundary as json?
 
 STAR_BAR = '********************************************************'
 
@@ -13,9 +13,9 @@ STAR_BAR = '********************************************************'
 def generate_corners(theta_0: float = 0,
                      theta_f: float = 2*np.pi,
                      max_theta: float = np.pi/2,
-                     min_theta: float = np.pi/12,
-                     max_r = 1.0,
-                     min_r = 0.5) -> List[Tuple[float, float]]:
+                     min_theta: float = np.pi/16,
+                     max_r=1.0,
+                     min_r=0.5) -> List[Tuple[float, float]]:
     """
     Generates corners of a boundary within the unit disc.
     Start at theta_0 and pick a random radius. Mark a corner. Then turn
@@ -118,15 +118,43 @@ def get_neighbors(p: Tuple[int, int]) -> List[Tuple[int, int]]:
     return [(p[0], p[1] + 1), (p[0], p[1] - 1), (p[0] + 1, p[1]), (p[0] - 1, p[1])]
 
 
+def rgb_normalize(values: np.ndarray) -> np.array:
+    """
+    Normalizes values in any float range to integers [0, 255].
+    Accomplishes this by mapping the min value in the input
+    vector to 0 and the max to 255, linearly interpolating in
+    between. Truncates to integers for output
+
+    :param values: ``np.array`` of values to normalize
+    :return: An ``np.array`` of values normalized to integers [0, 255]
+    """
+    min_val = np.min(values)
+    max_val = np.max(values)
+    normalized_values = 255 * np.ones_like(values)
+
+    # Choose to "error out" by returning all 255.
+    if min_val == max_val:
+        return normalized_values
+
+    for i in range(len(values)):
+        normalized_values[i] = int(255*(values[i] - min_val) / (max_val - min_val))
+    return normalized_values
+
+
 class Boundary:
     """
-    TODO: docs
+    Class to represent a closed boundary in a grid space.
+
+    Try properties ``boundary_size`` and `interior_size`` to get the number
+    of points on and within the boundary, respectively.
+
+    :ivar interior_idx: Dictionary assigning a unique ID to each point
+        inside the boundary. ID's range [0, interior_size].
+    :ivar boundary_idx: Dictionary assigning a unique ID to each point on the boundary.
+        ID's range [0, boundary_size].
     """
 
-    def __init__(self, n: int,
-                 boundary_function: Callable[[Tuple[float, float]], float] = lambda p: 1.0,
-                 interior_function: Callable[[Tuple[float, float]], float] = lambda p: 0.0,
-                 ):
+    def __init__(self, n: int):
         """
         Constructor
 
@@ -134,13 +162,9 @@ class Boundary:
         edit and screw up the boundary/interior index. Use tuples? Vectors for now
 
         :param n: length of one side of the grid containing boundary
-        :param boundary_function: Function to be evaluated on the boundary (default 1.0)
-        :param interior_function: Function to be evaluated on the interior (default 0.0)
         """
 
         self.n = n
-        self.boundary_function = boundary_function
-        self.interior_function = interior_function
 
         boundary_set = set()
 
@@ -170,7 +194,7 @@ class Boundary:
             # The boundary is strictly generated so that it will never touch the grid edges.
             # Therefore, the interior will not, either. If this happens, something failed.
             if int(p[0] - (n - 1) / 2) in {0, n} or int(p[1] - (n - 1) / 2) in {0, n}:
-                raise Exception('GENERATION FAILURE: BOUNDARY NOT CLOSED!')
+                raise Exception('CRITICAL FAILURE: BOUNDARY NOT CLOSED!')
 
             if p not in boundary_set:
                 if p not in self.interior_idx:
@@ -186,7 +210,7 @@ class Boundary:
             # Here we are constructing a minimal boundary, including on the
             # points that the interior points are touching.
             else:
-                # PLEASE!! do not try to double-add. this will TOTALLY screw up `boundary_idx`
+                # PLEASE!! do not try to double-add. this will TOTALLY screw up ``boundary_idx``
                 # because if a duplicate is considered here, it will update, but it won't change
                 # the length, and the next unique point added will then have the same index. Bad!!
                 if p not in self.boundary_idx:
@@ -208,30 +232,40 @@ class Boundary:
         print(f'~{(self.interior_size / dt):.2f} points per second.')
         print(STAR_BAR)
 
-    def _vectorize_interior(self) -> np.ndarray:
+    def vectorize_interior(self,
+                           interior_function: Callable[[Tuple[float, float]], float] = lambda p: 0.0
+                           ) -> np.ndarray:
         """
-        :return: Vector of interior values indexed by `self.interior_idx`
+        :return: Vector of interior values indexed by ``self.interior_idx``
         """
         f_vec = np.zeros(self.interior_size)
         for ip in self.interior_idx:
-            f_vec[self.interior_idx[ip]] = self.interior_function(ip)
+            f_vec[self.interior_idx[ip]] = interior_function(ip)
         return f_vec
 
-    def _vectorize_boundary(self) -> np.ndarray:
+    def vectorize_boundary(self,
+                           boundary_function: Callable[[Tuple[float, float]], float] = lambda p: 1.0
+                           ) -> np.ndarray:
         """
-        :return: Vector of boundary values indexed by `self.boundary_idx`
+        :return: Vector of boundary values indexed by ```self.boundary_idx``
         """
         g_vec = np.zeros(self.boundary_size)
         for bp in self.boundary_idx:
-            g_vec[self.boundary_idx[bp]] = self.boundary_function(bp)
+            g_vec[self.boundary_idx[bp]] = boundary_function(bp)
         return g_vec
 
-    def vectorize(self, walker: Tuple[float, float, float, float]):
+    def generate_fdm_components(self,
+                                walker: Tuple[float, float, float, float],
+                                interior_function: Callable[[Tuple[float, float]], float],
+                                boundary_function: Callable[[Tuple[float, float]], float],
+                                ):
         """
-        Create the components of "Au = A_hat*g + f"
-        to run finite difference method with this boundary.
+        Create the components of "Au = -A_hat*g + f" to run finite difference method
+        with this boundary. Users should reference "Numerical Methods for Elliptic and
+        Parabolic Partial Differential Equations" by Knabner & Angerman to understand
+        FDM. The notation used here comes from Chapter 1, section 2, pg. 24-25.
 
-        TODO: Maek walker a parameter!!
+        TODO: Make Walker class a parameter
 
         :return: Dictionary of components of "Au = -A_hat*g + f":
         {
@@ -241,19 +275,17 @@ class Boundary:
             'g': <np.array g vector, evals of boundary function over boundary>
         }
         """
-        # (1) f vector - interior values
-        f_vec = self._vectorize_interior()
+        # Shabam:
+        f_vec = self.vectorize_interior(interior_function)
+        g_vec = self.vectorize_boundary(boundary_function)
 
-        # (2) g vector - boundary values
-        g_vec = self._vectorize_boundary()
-
-        # (3 + 4) A and A_hat at the same time!
+        # A and A_hat can be made at the same time!
         A_rows = []
         A_cols = []
         A_vals = []
         A_hat_rows = []
         A_hat_cols = []
-        # all values in A_hat are -1, so no need for an `Ahat_vals`
+        # all values in A_hat are -1, so no need for an ``A_hat_vals``
 
         for ip, idx in self.interior_idx.items():
 
@@ -290,69 +322,50 @@ class Boundary:
 
         return {'A': A.tocsr(), 'A_hat': A_hat.tocsr(), 'f': f_vec, 'g': g_vec}
 
-    def make_img(self, show_bv=True, show_iv=True):
+    def make_img(self,
+                 interior_function: Callable[[Tuple[float, float]], float] = lambda p: 0.0,
+                 boundary_function: Callable[[Tuple[float, float]], float] = lambda p: 1.0) -> Image.Image:
         """
         Makes a cool picture of the boundary
-        :param show_bv: Whether to show the boundary function values
-        :param show_iv: Whether to show the interior function values
-        :return: Image object for saving or showing. (hint: img = make_img(); img.show())
+        :param interior_function: Will be evaluated over interior points & rgb normalized
+        :param boundary_function: Will be evaluated over boundary points & rgb normalized
+        :return: Image object for saving or showing. (hint: img = make_img(...); img.show())
         """
         # We'll layer these to create an RGB image
         red_window = np.zeros((self.n, self.n))
         green_window = np.zeros((self.n, self.n))
         blue_window = np.zeros((self.n, self.n))
 
-        # First vectorize
-        g_vec = self._vectorize_boundary()
-        f_vec = self._vectorize_interior()
+        # First vectorize & rgb normalize
+        f_vec = self.vectorize_interior(interior_function)
+        g_vec = self.vectorize_boundary(boundary_function)
 
-        # We need to make a map [-1, 1] --> [0, 255].
-        # For enhanced visualization, we first min-max normalize the boundary values,
-        # linearly squeezing them into to fit perfectly into [0, 1] (min +-> 0, max +-> 1)
-        # Then a simple multiplication by 255 puts them into the 8-bit unsigned int range for RGB
-        bv_min = np.min(g_vec)
-        bv_max = np.max(g_vec)
-        normalized_boundary_values = np.zeros_like(g_vec)
-        for i in range(len(g_vec)):
-            # In case we just want the un-normalized values
-            # normalized_boundary_values[i] = g_vec[i]
-            if show_bv:
-                normalized_boundary_values[i] = int(
-                    255 * (g_vec[i] - bv_min) / (bv_max - bv_min)) if bv_max != bv_min else 0
-            # else it will remain zero
+        normalized_ivs = rgb_normalize(f_vec)
+        normalized_bvs = rgb_normalize(g_vec)
 
         # Make a "layer" for each RGB color.
         # We can be creative or whatever to make it look nice, e.g. green ==> good, red ==> bad
         for bp, idx in self.boundary_idx.items():
             c = int(bp[0] + (self.n - 1) / 2)  # x-axis goes left --> right
             r = (self.n - 1) - int(bp[1] + (self.n - 1) / 2)  # y-axis goes bottom --> top
-            red_window[r][c] = 255 - normalized_boundary_values[idx]
-            green_window[r][c] = normalized_boundary_values[idx] if show_bv else 255
-            blue_window[r][c] = 0 if show_bv else 255
-
-        # Now do the same for the interior.
-        # It's going to be a real nice addition to the scrapbook.
-        iv_min = np.min(f_vec)
-        iv_max = np.max(f_vec)
-        normalized_interior_values = np.zeros_like(f_vec)
-        for i in range(len(f_vec)):
-            if show_iv:
-                normalized_interior_values[i] = 128 * (f_vec[i] - iv_min) / (iv_max - iv_min) if iv_max != iv_min else 0
-            # else it will remain zero and hence be a black pixel
+            red_window[r][c] = 255 - normalized_bvs[idx]
+            green_window[r][c] = normalized_bvs[idx]
+            blue_window[r][c] = 0
 
         for ip, idx in self.interior_idx.items():
             c = int(ip[0] + (self.n - 1) / 2)  # x-axis goes left --> right
             r = (self.n - 1) - int(ip[1] + (self.n - 1) / 2)  # y-axis goes bottom --> top
-            red_window[r][c] = 16 if show_iv else 0
-            green_window[r][c] = 16 if show_iv else 0
-            blue_window[r][c] = normalized_interior_values[idx]
+            red_window[r][c] = 16
+            green_window[r][c] = 16
+            blue_window[r][c] = 16 + int(0.5 * normalized_ivs[idx])
 
-        # Mark the origin & two points to clarify the axes' directions
+        # Mark the origin
         o = int((self.n - 1) / 2)
         red_window[o][o] = 255
         green_window[o][o] = 255
         blue_window[o][o] = 255
 
+        # & two extra points to mark the directions
         # red_window[o+3][o] = 0
         # green_window[o+3][o] = 255
         # blue_window[o+3][o] = 255

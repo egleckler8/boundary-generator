@@ -3,12 +3,10 @@ import numpy as np
 import noise
 
 
-import boundary
+from boundary import Boundary
 
 
-
-
-n = 93
+n = 23
 
 
 def g(p: Tuple[float, float]) -> float:
@@ -49,15 +47,15 @@ w_symmetric = (0.25, 0.25, 0.25, 0.25)
 w1 = (0.125, 0.125, 0.325, 0.325)
 w2 = (0.325, 0.325, 0.125, 0.125)
 
-b = boundary.Boundary(n=n, interior_function=f, boundary_function=g)
+b = Boundary(n)
 
-yeah = b.vectorize(walker=w1)
+yeah = b.generate_fdm_components(walker=w1, interior_function=f, boundary_function=g)
 
 
-img = b.make_img()
+img = b.make_img(f, g)
 # img.save('imgs/boundary0.png')
 img.show()
-#print(b)
+print(b)
 
 
 
