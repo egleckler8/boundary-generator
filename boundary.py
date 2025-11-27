@@ -357,14 +357,20 @@ class Boundary:
         return line
 
     @staticmethod
-    def _discrete_interpolate_corners(corners: List[Tuple[float, float]]) -> Set[Tuple[int, int]]:
+    def _discrete_interpolate_corners(corners: List[Tuple[float, float]]
+                                      ) -> Set[Tuple[int, int]]:
         """
-        Connects an ordered list of corner points in the plane to each other in the grid
-        :param corners: List of ordered corner points. They should be sorted by rotation,
-                        e.g. pick one point and the next point should be the closest point
-                        reachable by rotation around the origin.
+        Connects a list of corner points in the plane to each other in the grid
+        :param corners: List of corner points.
         :return: Set of boundary points created by these corners. Not guaranteed to be closed.
         """
+        # First sort them by angle with x-axis, quadrant aware. This is so no two interpolation
+        # lines cross each other. As an example of what this is trying to avoid, imagine we are
+        # passed the vertices of the unit box in this order: (0,0), (1,0), (0, 1), (1,1).
+        # The function draws lines between the points in that exact order, which, in this case,
+        # would give us an hourglass shape rather than a square. No bueno. Hence, arctan2:
+        corners = sorted(corners, key=lambda p: np.arctan2(p[1], p[0]) % (2 * np.pi))
+
         boundary_set = set()
         for i in range(len(corners)):
             a, b = corners[i], corners[(i + 1) % len(corners)]
