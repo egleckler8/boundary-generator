@@ -4,10 +4,15 @@ import noise
 
 
 from boundary import Boundary
+import fdm
 
 
-n = 23
+n = 40
 
+# Walkers with directions N, S, E, W
+w1 = (0.125, 0.125, 0.325, 0.325)
+w2 = (0.325, 0.325, 0.125, 0.125)
+wS = (0.25, 0.25, 0.25, 0.25)
 
 def g(p: Tuple[float, float]) -> float:
     """
@@ -16,7 +21,7 @@ def g(p: Tuple[float, float]) -> float:
     :return: g(p)
     """
     # This can help us check that everything is in order
-    # return p[0]
+    return p[0]
 
     # The following will sample from smooth noise:
     scale = 2
@@ -38,22 +43,25 @@ def f(p: Tuple[int, int]) -> float:
     # This can help us check the orientation:
     # return p[0]
     # ... and this will surely make a fun picture, too:
-    return np.sin(p[0] * p[1] / n)
-
-
+    # return np.sin(p[0] * p[1] / n)
+    return 0.0
 
 
 b = Boundary(n)
 
-
 # Test out FDM on the boundary
 w1 = (0.125, 0.125, 0.325, 0.325)   # N, S, E, W
-A, A_hat, f_vec, g_vec = b.generate_fdm_components(walker=w1, interior_function=f, boundary_function=g)
+A, A_hat, f_vec, g_vec = fdm.generate_fdm_components(boundary=b, walker=w1, interior_function=f, boundary_function=g)
 
-# Test out image generation:
-img = b.make_img(f, g)
-# img.save('imgs/boundary0.png')
+u = fdm.solve_fdm(A, A_hat, f_vec, g_vec)
+u = fdm.map_solution(u, b)
+
+img = b.make_img(u, g)
 img.show()
+# Test out image generation:
+# img = b.make_img(f, g)
+# img.save('imgs/boundary0.png')
+# img.show()
 
 # Test out the __str__ method:
 # print(b)
