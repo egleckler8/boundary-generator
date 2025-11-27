@@ -146,7 +146,8 @@ class Boundary:
 
     def make_img(self,
                  interior_function: Callable[[Tuple[float, float]], float] = lambda p: 0.0,
-                 boundary_function: Callable[[Tuple[float, float]], float] = lambda p: 1.0) -> Image.Image:
+                 boundary_function: Callable[[Tuple[float, float]], float] = lambda p: 1.0
+                 ) -> Image.Image:
         """
         Makes a cool picture of the boundary
         :param interior_function: Will be evaluated over interior points & rgb normalized
@@ -198,7 +199,8 @@ class Boundary:
         window_stack = np.stack((red_window, green_window, blue_window), axis=2)
         return Image.fromarray(window_stack.astype('uint8'))
 
-    def _populate_interior(self, boundary_set: Set[Tuple[int, int]]) -> None:
+    def _populate_interior(self, boundary_set: Set[Tuple[int, int]]
+                           ) -> None:
         """
         Given a set of boundary points, populates interior points in ``interior_idx``
         and populate ``boundary_idx`` with minimal set of boundary points. "Minimal
@@ -219,7 +221,7 @@ class Boundary:
             # The boundary is strictly generated so that it will never touch the grid edges.
             # Therefore, the interior will not, either. If this happens, something failed.
             if int(p[0] - (self.n - 1) / 2) in [0, self.n] or int(p[1] - (self.n - 1) / 2) in [0, self.n]:
-                raise Exception('CRITICAL FAILURE: BOUNDARY NOT CLOSED!')
+                raise Exception(f'CRITICAL FAILURE: BOUNDARY NOT CLOSED IN {self.n}x{self.n} GRID!')
 
             if p not in boundary_set:
                 if p not in self.interior_idx:
@@ -265,7 +267,8 @@ class Boundary:
                           max_theta: float = np.pi / 2,
                           min_theta: float = np.pi / 16,
                           max_r=1.0,
-                          min_r=0.5) -> List[Tuple[float, float]]:
+                          min_r=0.5
+                          ) -> List[Tuple[float, float]]:
         """
         Generates corners of a boundary within the unit disc.
         Start at theta_0 and pick a random radius. Mark a corner. Then turn
@@ -301,7 +304,8 @@ class Boundary:
 
     @staticmethod
     def _discrete_interpolate(a: Tuple[float, float],
-                             b: Tuple[float, float]) -> Set[Tuple[int, int]]:
+                              b: Tuple[float, float]
+                              ) -> Set[Tuple[int, int]]:
         """
         Takes two points in the plane (R^2) and returns a line between them
         embedded in the grid (Z^2). This line is not guaranteed to be "minimal"
