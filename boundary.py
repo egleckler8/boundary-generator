@@ -272,7 +272,7 @@ class Boundary:
             c = int(ip[0] + (self.n - 1) / 2)  # x-axis goes left --> right
             r = (self.n - 1) - int(ip[1] + (self.n - 1) / 2)  # y-axis goes bottom --> top
             red_window[r][c] = 0
-            green_window[r][c] = 0
+            green_window[r][c] = 255 - normalized_ivs[idx]
             blue_window[r][c] = normalized_ivs[idx]
 
         # Mark the origin
